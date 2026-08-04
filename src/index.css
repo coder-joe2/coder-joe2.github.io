@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Outfit", "Noto Sans Tamil", sans-serif;
+  --font-display: "Syne", sans-serif;
+  --color-brand-yellow: #f0a500;
+  --color-brand-yellow-light: #ffcc00;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(122, 127, 150, 0.2);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(240, 165, 0, 0.4);
+}
+
+/* Base resets & styles matching standard animations */
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-sans);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Custom Leaflet Map responsiveness overrides */
+.leaflet-container {
+  font-family: inherit;
+  z-index: 10;
+  border-radius: 14px;
+}
+
+.leaflet-bar {
+  border: 1.5px solid rgba(46, 49, 80, 0.8) !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
+}
+
+.leaflet-bar a {
+  background-color: #1a1d27 !important;
+  color: #f0ede8 !important;
+  border-bottom: 1px solid #2e3150 !important;
+}
+
+.leaflet-bar a:hover {
+  background-color: #222537 !important;
+  color: #f0a500 !important;
+}
+
+/* Custom Leaflet Dark Popup Styles */
+.leaflet-popup-content-wrapper {
+  background: #111322 !important;
+  color: #f3f4f6 !important;
+  border: 1.5px solid #2e3150 !important;
+  border-radius: 12px !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5) !important;
+  padding: 4px !important;
+}
+
+.leaflet-popup-content {
+  margin: 12px 14px 10px 14px !important;
+  line-height: inherit !important;
+}
+
+.leaflet-popup-tip {
+  background: #111322 !important;
+  border-left: 1.5px solid #2e3150 !important;
+  border-bottom: 1.5px solid #2e3150 !important;
+}
+
+.leaflet-popup-close-button {
+  color: #9cb3c9 !important;
+  font-weight: bold !important;
+}
+
+.leaflet-popup-close-button:hover {
+  color: #f0a500 !important;
+  background: transparent !important;
+}
+

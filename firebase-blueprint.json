@@ -1,0 +1,59 @@
+{
+  "entities": {
+    "BusStop": {
+      "title": "BusStop",
+      "description": "A bus stop timing board entry containing various village route options",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "village": { "type": "string" },
+        "location": { "type": "string" },
+        "startRoute": { "type": "string" },
+        "endRoute": { "type": "string" },
+        "route": { "type": "string" },
+        "timings": { "type": "array" },
+        "district": { "type": "string" },
+        "gps": { "type": "string" },
+        "date": { "type": "string" },
+        "timestamp": { "type": "number" },
+        "contributor": { "type": "string" },
+        "contributorEmail": { "type": "string" },
+        "activeDays": { "type": "string" },
+        "excludedDays": { "type": "string" },
+        "likeCount": { "type": "number" }
+      },
+      "required": ["name", "village", "location", "timings", "district"]
+    },
+    "BusReportNotification": {
+      "title": "BusReportNotification",
+      "description": "Notification document sent to bus stop creators when issues are reported",
+      "type": "object",
+      "properties": {
+        "stopId": { "type": "string" },
+        "stopName": { "type": "string" },
+        "busName": { "type": "string" },
+        "ownerName": { "type": "string" },
+        "reportedBy": { "type": "string" },
+        "reason": { "type": "string" },
+        "details": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "read": { "type": "boolean" }
+      },
+      "required": ["stopId", "stopName", "ownerName", "reportedBy", "reason", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/bus_updates/{stopId}": {
+      "schema": "BusStop",
+      "description": "Bus timing documents contributed by users"
+    },
+    "/bus_notifications/{notificationId}": {
+      "schema": "BusReportNotification",
+      "description": "Report notifications delivered to bus stop owners"
+    },
+    "/bus_reports/{reportId}": {
+      "schema": "BusReportNotification",
+      "description": "System report audit log entries"
+    }
+  }
+}

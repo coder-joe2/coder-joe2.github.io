@@ -1,0 +1,6 @@
+{
+  "name": "Tamil Nadu Bus Stop Registry",
+  "description": "Get real-time local bus stop timings, routes, and schedules across Tamil Nadu village buses easily.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
