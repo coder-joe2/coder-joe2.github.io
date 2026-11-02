@@ -1,10 +1,12 @@
 {
-  "projectId": "bus-timing-58180",
-  "appId": "1:876150010889:web:1104b883ebcf8189cab4d8",
-  "apiKey": "AIzaSyC_Mg9liHN8zVa0e0W7hr5N_NhnQhPYqUA",
-  "authDomain": "bus-timing-58180.firebaseapp.com",
-  "firestoreDatabaseId": "(default)",
-  "storageBucket": "bus-timing-58180.firebasestorage.app",
-  "messagingSenderId": "876150010889",
-  "measurementId": "G-6PC1ENSG0S"
+  "projectId": "omega-mantis-nxhgq",
+  "appId": "1:631382355310:web:9fa7be092b9bc88678e57f",
+  "apiKey": "AIzaSyCdezQZmUP6Z59pNwzyocFGxF5Ix2SpDn0",
+  "authDomain": "omega-mantis-nxhgq.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-tamilnadubusstop-fd90e567-34df-4a7d-b1c5-a067e22a4720",
+  "storageBucket": "omega-mantis-nxhgq.firebasestorage.app",
+  "messagingSenderId": "631382355310",
+  "measurementId": "",
+  "oAuthClientId": "631382355310-e9jvtapkn9r07u9cutdhlcs1n13i1re5.apps.googleusercontent.com",
+  "recaptchaSiteKey": ""
 }

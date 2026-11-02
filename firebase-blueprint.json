@@ -20,9 +20,26 @@
         "contributorEmail": { "type": "string" },
         "activeDays": { "type": "string" },
         "excludedDays": { "type": "string" },
-        "likeCount": { "type": "number" }
+        "likeCount": { "type": "number" },
+        "dislikeCount": { "type": "number" }
       },
       "required": ["name", "village", "location", "timings", "district"]
+    },
+    "RegisteredMember": {
+      "title": "RegisteredMember",
+      "description": "User member registered on the platform",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "username": { "type": "string" },
+        "role": { "type": "string" },
+        "registeredAt": { "type": "string" },
+        "timestamp": { "type": "number" },
+        "provider": { "type": "string" }
+      },
+      "required": ["name", "email", "registeredAt"]
     },
     "BusReportNotification": {
       "title": "BusReportNotification",
@@ -54,6 +71,14 @@
     "/bus_reports/{reportId}": {
       "schema": "BusReportNotification",
       "description": "System report audit log entries"
+    },
+    "/registered_members/{memberId}": {
+      "schema": "RegisteredMember",
+      "description": "Registered platform members"
+    },
+    "/users/{userId}": {
+      "schema": "RegisteredMember",
+      "description": "Member profile information"
     }
   }
 }
