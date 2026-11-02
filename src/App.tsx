@@ -56,7 +56,10 @@ import {
   updateDoc,
   setDoc,
   increment,
-  getDocFromServer
+  getDocFromServer,
+  arrayUnion,
+  arrayRemove,
+  getDoc
 } from "firebase/firestore";
 import { 
   getAuth, 
@@ -90,6 +93,8 @@ interface BusStop {
   excludedDays?: string; // Days of Operation (Excluded days)
   likeCount?: number;    // Like count tracking metric
   dislikeCount?: number; // Dislike count tracking metric
+  likedUsers?: string[]; // Array of user identifiers who liked
+  dislikedUsers?: string[]; // Array of user identifiers who disliked
   creatorId?: string | null;   // UID of creator
   creatorEmail?: string | null; // Email of creator
 }
@@ -146,7 +151,9 @@ export const SEED_BUS_STOPS: BusStop[] = [
     activeDays: "All Days",
     excludedDays: "",
     likeCount: 11,
-    dislikeCount: 0
+    dislikeCount: 0,
+    likedUsers: [],
+    dislikedUsers: []
   }
 ];
 
@@ -1579,8 +1586,21 @@ export default function App() {
   // Filter helpers
   const [selectedDistrictFilter, setSelectedDistrictFilter] = useState("All");
 
-  // Authentication State
-  const [userSession, setUserSession] = useState<UserSession | null>(null);
+  // User Session Helper
+  const getUserKey = (session: UserSession | null): string => {
+    if (!session) return "";
+    return (session.email || session.username || session.uid || "").toLowerCase().trim();
+  };
+
+  // Authentication State with instant synchronous restoration from localStorage
+  const [userSession, setUserSession] = useState<UserSession | null>(() => {
+    try {
+      const savedSess = localStorage.getItem("busStopSess_v1");
+      return savedSess ? JSON.parse(savedSess) : null;
+    } catch (e) {
+      return null;
+    }
+  });
   const canEditStops = !!userSession && (activeTab === "add" || activeTab === "owner");
 
   // User Votes State (Per-user tracking: 'like' | 'dislike')
@@ -1589,7 +1609,7 @@ export default function App() {
       const savedSess = localStorage.getItem("busStopSess_v1");
       if (savedSess) {
         const sess = JSON.parse(savedSess);
-        const uKey = sess.email || sess.username || sess.uid;
+        const uKey = (sess.email || sess.username || sess.uid || "").toLowerCase().trim();
         const saved = localStorage.getItem(`user_votes_${uKey}`);
         if (saved) return JSON.parse(saved);
         // Fallback from old liked_stops if available
@@ -1608,6 +1628,23 @@ export default function App() {
     }
   });
 
+  // Helper functions to reliably detect user's like/dislike state for any stop
+  const isStopLikedByUser = (stop: BusStop): boolean => {
+    const uKey = getUserKey(userSession);
+    if (!uKey) return false;
+    if (userVotes[stop.id] === "like") return true;
+    if (stop.likedUsers && Array.isArray(stop.likedUsers) && stop.likedUsers.includes(uKey)) return true;
+    return false;
+  };
+
+  const isStopDislikedByUser = (stop: BusStop): boolean => {
+    const uKey = getUserKey(userSession);
+    if (!uKey) return false;
+    if (userVotes[stop.id] === "dislike") return true;
+    if (stop.dislikedUsers && Array.isArray(stop.dislikedUsers) && stop.dislikedUsers.includes(uKey)) return true;
+    return false;
+  };
+
   // Derived arrays for quick lookups
   const likedStops = Object.entries(userVotes)
     .filter(([_, v]) => v === "like")
@@ -1618,39 +1655,40 @@ export default function App() {
 
   // Save user votes whenever state or user session changes
   useEffect(() => {
-    if (userSession) {
-      const uKey = userSession.email || userSession.username || userSession.uid;
+    const uKey = getUserKey(userSession);
+    if (uKey) {
       localStorage.setItem(`user_votes_${uKey}`, JSON.stringify(userVotes));
     } else {
       localStorage.setItem("user_votes", JSON.stringify(userVotes));
     }
   }, [userVotes, userSession]);
 
-  // Load user specific votes when userSession changes
+  // Load user specific votes when userSession changes or on mount
   useEffect(() => {
-    if (userSession) {
-      const uKey = userSession.email || userSession.username || userSession.uid;
+    const uKey = getUserKey(userSession);
+    if (uKey) {
       try {
         const saved = localStorage.getItem(`user_votes_${uKey}`);
         if (saved) {
-          setUserVotes(JSON.parse(saved));
-        } else {
-          // Check for legacy liked_stops
-          const oldLiked = localStorage.getItem(`liked_stops_${uKey}`);
-          if (oldLiked) {
-            const arr: string[] = JSON.parse(oldLiked);
-            const migrated: Record<string, "like" | "dislike"> = {};
-            arr.forEach(id => { migrated[id] = "like"; });
-            setUserVotes(migrated);
-          } else {
-            setUserVotes({});
-          }
+          setUserVotes(prev => ({ ...prev, ...JSON.parse(saved) }));
         }
-      } catch (e) {
-        setUserVotes({});
+      } catch (e) {}
+
+      // Online Firestore backup check
+      if (db) {
+        getDoc(doc(db, "user_votes", uKey)).then(snap => {
+          if (snap.exists()) {
+            const data = snap.data();
+            if (data?.votes) {
+              setUserVotes(prev => {
+                const merged = { ...prev, ...data.votes };
+                localStorage.setItem(`user_votes_${uKey}`, JSON.stringify(merged));
+                return merged;
+              });
+            }
+          }
+        }).catch(() => {});
       }
-    } else {
-      setUserVotes({});
     }
   }, [userSession?.email, userSession?.username, userSession?.uid]);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
@@ -1747,11 +1785,7 @@ export default function App() {
   // Firebase ready status flag for visual alerts
   const [usingFirebaseRealtime, setUsingFirebaseRealtime] = useState(false);
 
-  // --- YOUTUBE / INSTAGRAM STYLE LIKE & DISLIKE SYSTEM ---
-  // Rule 1: First Tap -> Activates (+1), turns on icon color, sends +1 to Firestore
-  // Rule 2: Tap Again -> Undoes (-1), resets icon to neutral outline, sends -1 to Firestore
-  // Rule 3: 1 Account = 1 Vote & Spam Prevention -> Cannot spam count; switches mutually between Like & Dislike
-
+  // --- 1 ACCOUNT = 1 PERMANENT VOTE SYSTEM (No loop, persists across refreshes) ---
   const toggleLike = async (stopId: string, e?: React.MouseEvent) => {
     if (e) {
       e.stopPropagation();
@@ -1763,57 +1797,76 @@ export default function App() {
       return;
     }
 
-    const currentVote = userVotes[stopId]; // undefined | 'like' | 'dislike'
+    const uKey = getUserKey(userSession);
+    if (!uKey) return;
+
     const targetStop = stops.find(s => s.id === stopId);
-    const currentLikes = Math.max(0, targetStop?.likeCount ?? 0);
-    const currentDislikes = Math.max(0, targetStop?.dislikeCount ?? 0);
+    if (!targetStop) return;
 
-    if (currentVote === "like") {
-      // Rule 2: Tapping it again: Undoing the Like (-1 Count)
-      const newLikes = Math.max(0, currentLikes - 1);
-      setUserVotes(prev => {
-        const next = { ...prev };
-        delete next[stopId];
-        return next;
-      });
-      setStops(prev => prev.map(s => s.id === stopId ? { ...s, likeCount: newLikes } : s));
-      triggerToast(language === "ta" ? "🤍 விருப்பம் விலக்கப்பட்டது (-1)" : "🤍 Removed like (-1)");
+    // Check if user already liked this bus stop
+    if (isStopLikedByUser(targetStop)) {
+      triggerToast(
+        language === "ta" 
+          ? "⚠️ நீங்கள் ஏற்கனவே இந்த பேருந்து நிறுத்தத்தை விரும்பிவிட்டீர்கள்! (1 முறை மட்டுமே வாக்களிக்க முடியும்)" 
+          : "⚠️ You have already liked this bus stop! (1 vote allowed per account)"
+      );
+      return;
+    }
 
-      if (db && !stopId.startsWith("local-") && !stopId.startsWith("off-")) {
-        try {
-          if (auth && !auth.currentUser) await signInAnonymously(auth).catch(() => {});
-          const docRef = doc(db, "bus_updates", stopId);
-          await setDoc(docRef, { likeCount: increment(-1) }, { merge: true }).catch(() => {});
-        } catch (err) {}
+    const currentLikes = Math.max(0, targetStop.likeCount ?? 0);
+    const newLikes = currentLikes + 1;
+    const isCurrentlyDisliked = isStopDislikedByUser(targetStop);
+    const newDislikes = isCurrentlyDisliked ? Math.max(0, (targetStop.dislikeCount ?? 0) - 1) : Math.max(0, targetStop.dislikeCount ?? 0);
+
+    // 1. Update user votes state & cache immediately
+    setUserVotes(prev => {
+      const next = { ...prev, [stopId]: "like" as const };
+      localStorage.setItem(`user_votes_${uKey}`, JSON.stringify(next));
+      return next;
+    });
+
+    // 2. Update stops in React state immediately
+    setStops(prev => prev.map(s => {
+      if (s.id === stopId) {
+        const nextLikedUsers = Array.from(new Set([...(s.likedUsers || []), uKey]));
+        const nextDislikedUsers = (s.dislikedUsers || []).filter(u => u !== uKey);
+        return {
+          ...s,
+          likeCount: newLikes,
+          dislikeCount: newDislikes,
+          likedUsers: nextLikedUsers,
+          dislikedUsers: nextDislikedUsers
+        };
       }
-    } else if (currentVote === "dislike") {
-      // Rule 3: Switching from Dislike to Like (-1 Dislike, +1 Like)
-      const newLikes = currentLikes + 1;
-      const newDislikes = Math.max(0, currentDislikes - 1);
-      setUserVotes(prev => ({ ...prev, [stopId]: "like" }));
-      setStops(prev => prev.map(s => s.id === stopId ? { ...s, likeCount: newLikes, dislikeCount: newDislikes } : s));
-      triggerToast(language === "ta" ? "💛 விரும்பப்பட்டது (+1)" : "💛 Liked bus stop! (+1)");
+      return s;
+    }));
 
-      if (db && !stopId.startsWith("local-") && !stopId.startsWith("off-")) {
-        try {
-          if (auth && !auth.currentUser) await signInAnonymously(auth).catch(() => {});
-          const docRef = doc(db, "bus_updates", stopId);
-          await setDoc(docRef, { likeCount: increment(1), dislikeCount: increment(-1) }, { merge: true }).catch(() => {});
-        } catch (err) {}
-      }
-    } else {
-      // Rule 1: The First Tap: Activating the Like (+1 Count)
-      const newLikes = currentLikes + 1;
-      setUserVotes(prev => ({ ...prev, [stopId]: "like" }));
-      setStops(prev => prev.map(s => s.id === stopId ? { ...s, likeCount: newLikes } : s));
-      triggerToast(language === "ta" ? "💛 விரும்பப்பட்டது (+1)" : "💛 Liked bus stop! (+1)");
+    triggerToast(language === "ta" ? "💛 விரும்பப்பட்டது (+1)" : "💛 Liked bus stop! (+1)");
 
-      if (db && !stopId.startsWith("local-") && !stopId.startsWith("off-")) {
-        try {
-          if (auth && !auth.currentUser) await signInAnonymously(auth).catch(() => {});
-          const docRef = doc(db, "bus_updates", stopId);
-          await setDoc(docRef, { likeCount: increment(1) }, { merge: true }).catch(() => {});
-        } catch (err) {}
+    // 3. Atomically update Firestore
+    if (db && !stopId.startsWith("local-") && !stopId.startsWith("off-")) {
+      try {
+        if (auth && !auth.currentUser) await signInAnonymously(auth).catch(() => {});
+        const docRef = doc(db, "bus_updates", stopId);
+        const updates: any = {
+          likeCount: increment(1),
+          likedUsers: arrayUnion(uKey)
+        };
+        if (isCurrentlyDisliked) {
+          updates.dislikeCount = increment(-1);
+          updates.dislikedUsers = arrayRemove(uKey);
+        }
+        await setDoc(docRef, updates, { merge: true }).catch(() => {});
+
+        // Save into user_votes ledger
+        const userVotesRef = doc(db, "user_votes", uKey);
+        await setDoc(userVotesRef, {
+          userId: uKey,
+          votes: { [stopId]: "like" },
+          updatedAt: Date.now()
+        }, { merge: true }).catch(() => {});
+      } catch (err) {
+        console.warn("Failed to persist like in Firestore:", err);
       }
     }
   };
@@ -1829,57 +1882,75 @@ export default function App() {
       return;
     }
 
-    const currentVote = userVotes[stopId]; // undefined | 'like' | 'dislike'
+    const uKey = getUserKey(userSession);
+    if (!uKey) return;
+
     const targetStop = stops.find(s => s.id === stopId);
-    const currentLikes = Math.max(0, targetStop?.likeCount ?? 0);
-    const currentDislikes = Math.max(0, targetStop?.dislikeCount ?? 0);
+    if (!targetStop) return;
 
-    if (currentVote === "dislike") {
-      // Rule 2: Tapping it again: Undoing the Dislike (-1 Count)
-      const newDislikes = Math.max(0, currentDislikes - 1);
-      setUserVotes(prev => {
-        const next = { ...prev };
-        delete next[stopId];
-        return next;
-      });
-      setStops(prev => prev.map(s => s.id === stopId ? { ...s, dislikeCount: newDislikes } : s));
-      triggerToast(language === "ta" ? "🤍 வெறுப்பு விலக்கப்பட்டது (-1)" : "🤍 Removed dislike (-1)");
+    if (isStopDislikedByUser(targetStop)) {
+      triggerToast(
+        language === "ta" 
+          ? "⚠️ நீங்கள் ஏற்கனவே விருப்பமின்மை தெரிவித்துள்ளீர்கள்! (1 முறை மட்டுமே)" 
+          : "⚠️ You have already disliked this bus stop! (1 vote allowed per account)"
+      );
+      return;
+    }
 
-      if (db && !stopId.startsWith("local-") && !stopId.startsWith("off-")) {
-        try {
-          if (auth && !auth.currentUser) await signInAnonymously(auth).catch(() => {});
-          const docRef = doc(db, "bus_updates", stopId);
-          await setDoc(docRef, { dislikeCount: increment(-1) }, { merge: true }).catch(() => {});
-        } catch (err) {}
+    const currentDislikes = Math.max(0, targetStop.dislikeCount ?? 0);
+    const newDislikes = currentDislikes + 1;
+    const isCurrentlyLiked = isStopLikedByUser(targetStop);
+    const newLikes = isCurrentlyLiked ? Math.max(0, (targetStop.likeCount ?? 0) - 1) : Math.max(0, targetStop.likeCount ?? 0);
+
+    // 1. Update user votes state & cache immediately
+    setUserVotes(prev => {
+      const next = { ...prev, [stopId]: "dislike" as const };
+      localStorage.setItem(`user_votes_${uKey}`, JSON.stringify(next));
+      return next;
+    });
+
+    // 2. Update stops in React state immediately
+    setStops(prev => prev.map(s => {
+      if (s.id === stopId) {
+        const nextDislikedUsers = Array.from(new Set([...(s.dislikedUsers || []), uKey]));
+        const nextLikedUsers = (s.likedUsers || []).filter(u => u !== uKey);
+        return {
+          ...s,
+          likeCount: newLikes,
+          dislikeCount: newDislikes,
+          likedUsers: nextLikedUsers,
+          dislikedUsers: nextDislikedUsers
+        };
       }
-    } else if (currentVote === "like") {
-      // Rule 3: Switching from Like to Dislike (-1 Like, +1 Dislike)
-      const newLikes = Math.max(0, currentLikes - 1);
-      const newDislikes = currentDislikes + 1;
-      setUserVotes(prev => ({ ...prev, [stopId]: "dislike" }));
-      setStops(prev => prev.map(s => s.id === stopId ? { ...s, likeCount: newLikes, dislikeCount: newDislikes } : s));
-      triggerToast(language === "ta" ? "👎 வெறுக்கப்பட்டது (+1)" : "👎 Disliked bus stop (+1)");
+      return s;
+    }));
 
-      if (db && !stopId.startsWith("local-") && !stopId.startsWith("off-")) {
-        try {
-          if (auth && !auth.currentUser) await signInAnonymously(auth).catch(() => {});
-          const docRef = doc(db, "bus_updates", stopId);
-          await setDoc(docRef, { likeCount: increment(-1), dislikeCount: increment(1) }, { merge: true }).catch(() => {});
-        } catch (err) {}
-      }
-    } else {
-      // Rule 1: The First Tap: Activating Dislike (+1 Count)
-      const newDislikes = currentDislikes + 1;
-      setUserVotes(prev => ({ ...prev, [stopId]: "dislike" }));
-      setStops(prev => prev.map(s => s.id === stopId ? { ...s, dislikeCount: newDislikes } : s));
-      triggerToast(language === "ta" ? "👎 வெறுக்கப்பட்டது (+1)" : "👎 Disliked bus stop (+1)");
+    triggerToast(language === "ta" ? "👎 வெறுக்கப்பட்டது (+1)" : "👎 Disliked bus stop (+1)");
 
-      if (db && !stopId.startsWith("local-") && !stopId.startsWith("off-")) {
-        try {
-          if (auth && !auth.currentUser) await signInAnonymously(auth).catch(() => {});
-          const docRef = doc(db, "bus_updates", stopId);
-          await setDoc(docRef, { dislikeCount: increment(1) }, { merge: true }).catch(() => {});
-        } catch (err) {}
+    // 3. Atomically update Firestore
+    if (db && !stopId.startsWith("local-") && !stopId.startsWith("off-")) {
+      try {
+        if (auth && !auth.currentUser) await signInAnonymously(auth).catch(() => {});
+        const docRef = doc(db, "bus_updates", stopId);
+        const updates: any = {
+          dislikeCount: increment(1),
+          dislikedUsers: arrayUnion(uKey)
+        };
+        if (isCurrentlyLiked) {
+          updates.likeCount = increment(-1);
+          updates.likedUsers = arrayRemove(uKey);
+        }
+        await setDoc(docRef, updates, { merge: true }).catch(() => {});
+
+        // Save into user_votes ledger
+        const userVotesRef = doc(db, "user_votes", uKey);
+        await setDoc(userVotesRef, {
+          userId: uKey,
+          votes: { [stopId]: "dislike" },
+          updatedAt: Date.now()
+        }, { merge: true }).catch(() => {});
+      } catch (err) {
+        console.warn("Failed to persist dislike in Firestore:", err);
       }
     }
   };
@@ -2284,7 +2355,9 @@ export default function App() {
               activeDays: data.activeDays || "All Days",
               excludedDays: data.excludedDays || "",
               likeCount: Math.max(0, typeof data.likeCount === "number" ? data.likeCount : 11),
-              dislikeCount: Math.max(0, typeof data.dislikeCount === "number" ? data.dislikeCount : 0)
+              dislikeCount: Math.max(0, typeof data.dislikeCount === "number" ? data.dislikeCount : 0),
+              likedUsers: Array.isArray(data.likedUsers) ? data.likedUsers.map(String) : [],
+              dislikedUsers: Array.isArray(data.dislikedUsers) ? data.dislikedUsers.map(String) : []
             };
           });
 
@@ -2301,6 +2374,36 @@ export default function App() {
             } catch (e) {}
             return merged;
           });
+
+          // Synchronize user votes immediately from Firestore stops data (persists on refresh!)
+          try {
+            const sessStr = localStorage.getItem("busStopSess_v1");
+            const sess = sessStr ? JSON.parse(sessStr) : null;
+            const uKey = (sess?.email || sess?.username || sess?.uid || "").toLowerCase().trim();
+            if (uKey) {
+              setUserVotes(prev => {
+                let modified = false;
+                const nextVotes = { ...prev };
+                remoteStops.forEach(st => {
+                  if (st.likedUsers && st.likedUsers.includes(uKey)) {
+                    if (nextVotes[st.id] !== "like") {
+                      nextVotes[st.id] = "like";
+                      modified = true;
+                    }
+                  } else if (st.dislikedUsers && st.dislikedUsers.includes(uKey)) {
+                    if (nextVotes[st.id] !== "dislike") {
+                      nextVotes[st.id] = "dislike";
+                      modified = true;
+                    }
+                  }
+                });
+                if (modified) {
+                  localStorage.setItem(`user_votes_${uKey}`, JSON.stringify(nextVotes));
+                }
+                return modified ? nextVotes : prev;
+              });
+            }
+          } catch (e) {}
           setUsingFirebaseRealtime(true);
         }, (error) => {
           const code = (error as any)?.code;
@@ -3039,7 +3142,7 @@ export default function App() {
         ` : `
           <div class="p-3 select-none space-y-2.5 text-neutral-200" style="min-width: 230px; font-family: system-ui, -apple-system, sans-serif; overflow: visible;">
             <div class="flex items-center justify-between border-b border-zinc-800 pb-1.5 mb-2">
-              <span class="text-xs font-black text-[#f0a500] uppercase tracking-wider">🚍 Edit Bus Stop ${idx + 1}</span>
+              <span class="text-xs font-black text-[#f0a500] uppercase tracking-wider flex items-center gap-1.5">🚏 EDIT BUS STOP ${idx + 1}</span>
             </div>
             
             <div class="space-y-1">
@@ -3139,9 +3242,9 @@ export default function App() {
             <button 
               type="button" 
               onclick="window.savePopupInfo(${idx})" 
-              class="w-full mt-2.5 py-2 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 active:scale-95 text-white font-extrabold text-[10.5px] rounded-lg shadow-lg hover:shadow-red-950/20 uppercase tracking-widest transition-all cursor-pointer text-center flex items-center justify-center gap-1 border border-red-500/20"
+              class="w-full mt-3 py-2.5 bg-red-600 hover:bg-red-700 active:scale-95 text-white font-extrabold text-[11px] rounded-lg shadow-lg uppercase tracking-wider transition-all cursor-pointer text-center flex items-center justify-center gap-1 border border-red-500/30"
             >
-              ✓ Done/Save Stop
+              ✓ DONE/SAVE STOP
             </button>
           </div>
         `;
@@ -3150,8 +3253,20 @@ export default function App() {
           closeButton: true,
           autoClose: false,
           closeOnEscapeKey: true,
+          autoPan: true,
+          autoPanPadding: [40, 40],
           className: "custom-bus-popup"
         });
+
+        if (activeStopPopupIdx === idx) {
+          setTimeout(() => {
+            try {
+              if (busMarker && pickerMapInstance && pickerMapInstance.hasLayer(busMarker)) {
+                busMarker.openPopup();
+              }
+            } catch (e) {}
+          }, 200);
+        }
 
         busMarker.on("popupopen", () => {
           setActiveStopPopupIdx(idx);
@@ -3251,18 +3366,43 @@ export default function App() {
         if (pinCStops.length === 0) {
           const firstStop = { lat: midLat, lng: midLng };
           const snappedFirst = snapToRoute(firstStop);
-          setPinCStops([snappedFirst]);
+          const initial = [{
+            lat: snappedFirst.lat,
+            lng: snappedFirst.lng,
+            busName: "",
+            departureTime: "08:30 AM",
+            crowdLevel: "Medium" as const
+          }];
+          setPinCStops(initial);
           setBusStopLatLng(snappedFirst);
           setBusPinSet(true);
-          setActiveStopPopupIdx(null);
-          syncStopsToRegistry([snappedFirst]);
+          setActiveStopPopupIdx(0);
+          syncStopsToRegistry(initial);
+          pickerMapInstance.setView([snappedFirst.lat, snappedFirst.lng], 15);
+        } else {
+          setActiveStopPopupIdx(0);
+          pickerMapInstance.setView([pinCStops[0].lat, pinCStops[0].lng], 15);
         }
-
-        // Pan and Zoom beautifully to the midpoint
-        pickerMapInstance.setView([midLat, midLng], 14);
       }
     }
   }, [mapStep, pickerMapInstance]);
+
+  // Ensure popup opens reliably whenever activeStopPopupIdx changes
+  useEffect(() => {
+    if (activeStopPopupIdx !== null && pickerMapInstance) {
+      const timer = setTimeout(() => {
+        if (pinCMarkersRef.current && pinCMarkersRef.current[activeStopPopupIdx]) {
+          const marker = pinCMarkersRef.current[activeStopPopupIdx];
+          if (marker && pickerMapInstance.hasLayer(marker)) {
+            try {
+              marker.openPopup();
+            } catch (err) {}
+          }
+        }
+      }, 180);
+      return () => clearTimeout(timer);
+    }
+  }, [activeStopPopupIdx, pinCStops.length]);
 
   // --- THEME SWAP ACTIONS ---
   const toggleTheme = () => {
@@ -3884,6 +4024,156 @@ export default function App() {
     const minLng = Math.min(a.lng, b.lng) - pad;
     const maxLng = Math.max(a.lng, b.lng) + pad;
     return p.lat >= minLat && p.lat <= maxLat && p.lng >= minLng && p.lng <= maxLng;
+  };
+
+  const getNextStopCoordinate = (): { lat: number; lng: number } => {
+    if (pickerPolylineInstance) {
+      try {
+        const latLngs = pickerPolylineInstance.getLatLngs();
+        const pts: { lat: number; lng: number }[] = [];
+        const extract = (arr: any) => {
+          if (Array.isArray(arr)) {
+            if (arr.length > 0) {
+              if (typeof arr[0] === 'number') {
+                pts.push({ lat: arr[0], lng: arr[1] });
+              } else if (typeof arr[0].lat === 'number') {
+                arr.forEach((item: any) => pts.push({ lat: item.lat, lng: item.lng }));
+              } else {
+                arr.forEach((item: any) => extract(item));
+              }
+            }
+          } else if (arr && typeof arr.lat === 'number' && typeof arr.lng === 'number') {
+            pts.push({ lat: arr.lat, lng: arr.lng });
+          }
+        };
+        extract(latLngs);
+
+        if (pts.length >= 2) {
+          let totalDist = 0;
+          const cumDists: number[] = [0];
+          for (let i = 0; i < pts.length - 1; i++) {
+            const d = Math.hypot(pts[i + 1].lat - pts[i].lat, pts[i + 1].lng - pts[i].lng);
+            totalDist += d;
+            cumDists.push(totalDist);
+          }
+
+          let targetDist = totalDist * 0.45;
+          if (pinCStops.length > 0) {
+            const lastStop = pinCStops[pinCStops.length - 1];
+            let closestDist = 0;
+            let minDiff = Infinity;
+            for (let i = 0; i < pts.length; i++) {
+              const diff = Math.hypot(pts[i].lat - lastStop.lat, pts[i].lng - lastStop.lng);
+              if (diff < minDiff) {
+                minDiff = diff;
+                closestDist = cumDists[i];
+              }
+            }
+
+            if (closestDist < totalDist * 0.82) {
+              targetDist = closestDist + (totalDist - closestDist) * 0.55;
+            } else {
+              const fraction = Math.min(0.92, (pinCStops.length + 1) / (pinCStops.length + 2));
+              targetDist = totalDist * fraction;
+            }
+          }
+
+          for (let i = 0; i < pts.length - 1; i++) {
+            if (targetDist >= cumDists[i] && targetDist <= cumDists[i + 1]) {
+              const segLen = cumDists[i + 1] - cumDists[i];
+              const t = segLen > 0 ? (targetDist - cumDists[i]) / segLen : 0;
+              return {
+                lat: pts[i].lat + t * (pts[i + 1].lat - pts[i].lat),
+                lng: pts[i].lng + t * (pts[i + 1].lng - pts[i].lng)
+              };
+            }
+          }
+          return pts[Math.floor(pts.length * 0.75)];
+        }
+      } catch (e) {
+        console.warn("Polyline coordinate calculation error:", e);
+      }
+    }
+
+    // Fallback: interpolate between pinALatLng and pinBLatLng
+    const fraction = pinCStops.length === 0 ? 0.45 : Math.min(0.9, 0.45 + pinCStops.length * 0.25);
+    const interpolated = {
+      lat: pinALatLng.lat + fraction * (pinBLatLng.lat - pinALatLng.lat),
+      lng: pinALatLng.lng + fraction * (pinBLatLng.lng - pinALatLng.lng)
+    };
+    return snapToRoute(interpolated);
+  };
+
+  const handleAddNewStopOnRoute = () => {
+    const nextCoord = snapToRoute(getNextStopCoordinate());
+    const newIdx = pinCStops.length;
+    const newStop = {
+      lat: nextCoord.lat,
+      lng: nextCoord.lng,
+      busName: "",
+      departureTime: "08:30 AM",
+      crowdLevel: "Medium" as const
+    };
+
+    const nextStops = [...pinCStops, newStop];
+    setPinCStops(nextStops);
+    syncStopsToRegistry(nextStops);
+    setBusStopLatLng(nextCoord);
+    setBusPinSet(true);
+    setActiveStopPopupIdx(newIdx);
+
+    if (pickerMapInstance) {
+      pickerMapInstance.panTo([nextCoord.lat, nextCoord.lng], { animate: true });
+    }
+
+    triggerToast(language === "ta" 
+      ? `🚏 பேருந்து நிறுத்தம் ${newIdx + 1} உருவாக்கப்பட்டது! விபரங்களை நிரப்பவும்.` 
+      : `🚏 Bus Stop ${newIdx + 1} created on route! Fill in details.`
+    );
+  };
+
+  const handleStep1ProceedToStops = () => {
+    setMapStep(2);
+    setActivePinSelector("BUS");
+
+    let firstStopCoord: { lat: number; lng: number };
+    if (pinCStops.length > 0) {
+      firstStopCoord = pinCStops[0];
+      setActiveStopPopupIdx(0);
+    } else {
+      const midLat = (pinALatLng.lat + pinBLatLng.lat) / 2;
+      const midLng = (pinALatLng.lng + pinBLatLng.lng) / 2;
+      firstStopCoord = snapToRoute({ lat: midLat, lng: midLng });
+      const initialStops = [{
+        lat: firstStopCoord.lat,
+        lng: firstStopCoord.lng,
+        busName: "",
+        departureTime: "08:30 AM",
+        crowdLevel: "Medium" as const
+      }];
+      setPinCStops(initialStops);
+      syncStopsToRegistry(initialStops);
+      setActiveStopPopupIdx(0);
+    }
+
+    setBusStopLatLng(firstStopCoord);
+    setBusPinSet(true);
+
+    if (pickerMapInstance) {
+      pickerMapInstance.setView([firstStopCoord.lat, firstStopCoord.lng], 15, { animate: true });
+      setTimeout(() => {
+        if (pinCMarkersRef.current && pinCMarkersRef.current[0]) {
+          try {
+            pinCMarkersRef.current[0].openPopup();
+          } catch (e) {}
+        }
+      }, 300);
+    }
+
+    triggerToast(language === "ta" 
+      ? "👉 தொடக்கம் & முடிவு சேமிக்கப்பட்டது! பேருந்து நிறுத்தம் 1 விபரங்களை உள்ளிடுக." 
+      : "👉 Start & End Saved! Edit Bus Stop 1 details."
+    );
   };
 
   const handleSaveMapCoordinates = () => {
@@ -4731,21 +5021,21 @@ export default function App() {
                         type="button"
                         onClick={(e) => toggleLike(item.id, e)}
                         className={`p-2 px-3 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer border ${
-                          userVotes[item.id] === "like"
+                          isStopLikedByUser(item)
                             ? "bg-amber-500/10 border-amber-500/30 text-amber-400"
                             : theme === "dark" ? "bg-[#1a1d27] border-[#2e3150] text-neutral-400 hover:text-amber-400" : "bg-neutral-100 border-neutral-300 text-neutral-500 hover:text-amber-500"
                         }`}
-                        title={userVotes[item.id] === "like" ? (language === "ta" ? "விருப்பம் விலக்கு" : "Unlike") : (language === "ta" ? "விருப்பம்" : "Like")}
+                        title={isStopLikedByUser(item) ? (language === "ta" ? "விருப்பம் தெரிவிக்கப்பட்டது (1 முறை மட்டுமே)" : "Already Liked (1 vote only)") : (language === "ta" ? "விருப்பம்" : "Like")}
                       >
                         <ThumbsUp 
                           className={`w-4 h-4 transition-all duration-200 active:scale-125 ${
-                            userVotes[item.id] === "like" 
+                            isStopLikedByUser(item) 
                               ? "fill-amber-400 text-amber-400" 
                               : "text-neutral-400 hover:text-amber-400"
                           }`} 
                         />
                         {Boolean(item.likeCount && item.likeCount > 0) && (
-                          <span className={`text-xs font-bold ${userVotes[item.id] === "like" ? "text-amber-400" : ""}`}>
+                          <span className={`text-xs font-bold ${isStopLikedByUser(item) ? "text-amber-400" : ""}`}>
                             {item.likeCount}
                           </span>
                         )}
@@ -4756,21 +5046,21 @@ export default function App() {
                         type="button"
                         onClick={(e) => toggleDislike(item.id, e)}
                         className={`p-2 px-3 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer border ${
-                          userVotes[item.id] === "dislike"
+                          isStopDislikedByUser(item)
                             ? "bg-rose-500/10 border-rose-500/30 text-rose-400"
                             : theme === "dark" ? "bg-[#1a1d27] border-[#2e3150] text-neutral-400 hover:text-rose-400" : "bg-neutral-100 border-neutral-300 text-neutral-500 hover:text-rose-500"
                         }`}
-                        title={userVotes[item.id] === "dislike" ? (language === "ta" ? "வெறுப்பு விலக்கு" : "Undislike") : (language === "ta" ? "வெறுப்பு" : "Dislike")}
+                        title={isStopDislikedByUser(item) ? (language === "ta" ? "விருப்பமின்மை தெரிவிக்கப்பட்டது (1 முறை மட்டுமே)" : "Already Disliked (1 vote only)") : (language === "ta" ? "வெறுப்பு" : "Dislike")}
                       >
                         <ThumbsDown 
                           className={`w-4 h-4 transition-all duration-200 active:scale-125 ${
-                            userVotes[item.id] === "dislike" 
+                            isStopDislikedByUser(item) 
                               ? "fill-rose-400 text-rose-400" 
                               : "text-neutral-400 hover:text-rose-400"
                           }`} 
                         />
                         {Boolean(item.dislikeCount && item.dislikeCount > 0) && (
-                          <span className={`text-xs font-bold ${userVotes[item.id] === "dislike" ? "text-rose-400" : ""}`}>
+                          <span className={`text-xs font-bold ${isStopDislikedByUser(item) ? "text-rose-400" : ""}`}>
                             {item.dislikeCount}
                           </span>
                         )}
@@ -5192,21 +5482,21 @@ export default function App() {
                                 type="button"
                                 onClick={(e) => toggleLike(stop.id, e)}
                                 className={`p-1.5 px-2 rounded-lg flex items-center gap-1 transition-all cursor-pointer z-10 border ${
-                                  userVotes[stop.id] === "like"
+                                  isStopLikedByUser(stop)
                                     ? "bg-amber-500/10 border-amber-500/30 text-amber-400"
                                     : "border-transparent hover:bg-neutral-500/10 text-neutral-400 hover:text-amber-400"
                                 }`}
-                                title={userVotes[stop.id] === "like" ? (language === "ta" ? "விருப்பம் விலக்கு" : "Unlike") : (language === "ta" ? "விருப்பம்" : "Like")}
+                                title={isStopLikedByUser(stop) ? (language === "ta" ? "விருப்பம் தெரிவிக்கப்பட்டது (1 முறை மட்டுமே)" : "Already Liked (1 vote only)") : (language === "ta" ? "விருப்பம்" : "Like")}
                               >
                                 <ThumbsUp 
                                   className={`w-3.5 h-3.5 transition-all duration-200 active:scale-125 ${
-                                    userVotes[stop.id] === "like" 
+                                    isStopLikedByUser(stop) 
                                       ? "fill-amber-400 text-amber-400" 
                                       : "text-neutral-400 hover:text-amber-400"
                                   }`} 
                                 />
                                 {Boolean(stop.likeCount && stop.likeCount > 0) && (
-                                  <span className={`text-xs font-bold ${userVotes[stop.id] === "like" ? "text-amber-400" : ""}`}>
+                                  <span className={`text-xs font-bold ${isStopLikedByUser(stop) ? "text-amber-400" : ""}`}>
                                     {stop.likeCount}
                                   </span>
                                 )}
@@ -5217,21 +5507,21 @@ export default function App() {
                                 type="button"
                                 onClick={(e) => toggleDislike(stop.id, e)}
                                 className={`p-1.5 px-2 rounded-lg flex items-center gap-1 transition-all cursor-pointer z-10 border ${
-                                  userVotes[stop.id] === "dislike"
+                                  isStopDislikedByUser(stop)
                                     ? "bg-rose-500/10 border-rose-500/30 text-rose-400"
                                     : "border-transparent hover:bg-neutral-500/10 text-neutral-400 hover:text-rose-400"
                                 }`}
-                                title={userVotes[stop.id] === "dislike" ? (language === "ta" ? "வெறுப்பு விலக்கு" : "Undislike") : (language === "ta" ? "வெறுப்பு" : "Dislike")}
+                                title={isStopDislikedByUser(stop) ? (language === "ta" ? "விருப்பமின்மை தெரிவிக்கப்பட்டது (1 முறை மட்டுமே)" : "Already Disliked (1 vote only)") : (language === "ta" ? "வெறுப்பு" : "Dislike")}
                               >
                                 <ThumbsDown 
                                   className={`w-3.5 h-3.5 transition-all duration-200 active:scale-125 ${
-                                    userVotes[stop.id] === "dislike" 
+                                    isStopDislikedByUser(stop) 
                                       ? "fill-rose-400 text-rose-400" 
                                       : "text-neutral-400 hover:text-rose-400"
                                   }`} 
                                 />
                                 {Boolean(stop.dislikeCount && stop.dislikeCount > 0) && (
-                                  <span className={`text-xs font-bold ${userVotes[stop.id] === "dislike" ? "text-rose-400" : ""}`}>
+                                  <span className={`text-xs font-bold ${isStopDislikedByUser(stop) ? "text-rose-400" : ""}`}>
                                     {stop.dislikeCount}
                                   </span>
                                 )}
@@ -5428,21 +5718,21 @@ export default function App() {
                                   type="button"
                                   onClick={(e) => toggleLike(stop.id, e)}
                                   className={`p-1.5 px-2 rounded-lg flex items-center gap-1 transition-all cursor-pointer z-10 border ${
-                                    userVotes[stop.id] === "like"
+                                    isStopLikedByUser(stop)
                                       ? "bg-amber-500/10 border-amber-500/30 text-amber-400"
                                       : "border-transparent hover:bg-neutral-500/10 text-neutral-400 hover:text-amber-400"
                                   }`}
-                                  title={userVotes[stop.id] === "like" ? (language === "ta" ? "விருப்பம் விலக்கு" : "Unlike") : (language === "ta" ? "விருப்பம்" : "Like")}
+                                  title={isStopLikedByUser(stop) ? (language === "ta" ? "விருப்பம் தெரிவிக்கப்பட்டது (1 முறை மட்டுமே)" : "Liked (1 vote max)") : (language === "ta" ? "விருப்பம்" : "Like")}
                                 >
                                   <ThumbsUp 
                                     className={`w-3.5 h-3.5 transition-all duration-200 active:scale-125 ${
-                                      userVotes[stop.id] === "like" 
+                                      isStopLikedByUser(stop) 
                                         ? "fill-amber-400 text-amber-400" 
                                         : "text-neutral-400 hover:text-amber-400"
                                     }`} 
                                   />
                                   {Boolean(stop.likeCount && stop.likeCount > 0) && (
-                                    <span className={`text-xs font-bold ${userVotes[stop.id] === "like" ? "text-amber-400" : ""}`}>
+                                    <span className={`text-xs font-bold ${isStopLikedByUser(stop) ? "text-amber-400" : ""}`}>
                                       {stop.likeCount}
                                     </span>
                                   )}
@@ -5453,21 +5743,21 @@ export default function App() {
                                   type="button"
                                   onClick={(e) => toggleDislike(stop.id, e)}
                                   className={`p-1.5 px-2 rounded-lg flex items-center gap-1 transition-all cursor-pointer z-10 border ${
-                                    userVotes[stop.id] === "dislike"
+                                    isStopDislikedByUser(stop)
                                       ? "bg-rose-500/10 border-rose-500/30 text-rose-400"
                                       : "border-transparent hover:bg-neutral-500/10 text-neutral-400 hover:text-rose-400"
                                   }`}
-                                  title={userVotes[stop.id] === "dislike" ? (language === "ta" ? "வெறுப்பு விலக்கு" : "Undislike") : (language === "ta" ? "வெறுப்பு" : "Dislike")}
+                                  title={isStopDislikedByUser(stop) ? (language === "ta" ? "வெறுப்பு தெரிவிக்கப்பட்டது" : "Disliked") : (language === "ta" ? "வெறுப்பு" : "Dislike")}
                                 >
                                   <ThumbsDown 
                                     className={`w-3.5 h-3.5 transition-all duration-200 active:scale-125 ${
-                                      userVotes[stop.id] === "dislike" 
+                                      isStopDislikedByUser(stop) 
                                         ? "fill-rose-400 text-rose-400" 
                                         : "text-neutral-400 hover:text-rose-400"
                                     }`} 
                                   />
                                   {Boolean(stop.dislikeCount && stop.dislikeCount > 0) && (
-                                    <span className={`text-xs font-bold ${userVotes[stop.id] === "dislike" ? "text-rose-400" : ""}`}>
+                                    <span className={`text-xs font-bold ${isStopDislikedByUser(stop) ? "text-rose-400" : ""}`}>
                                       {stop.dislikeCount}
                                     </span>
                                   )}
@@ -6845,11 +7135,7 @@ export default function App() {
               {mapStep === 1 && pinASet && pinBSet && (
                 <button
                   type="button"
-                  onClick={() => {
-                    setMapStep(2);
-                    setActivePinSelector("BUS");
-                    triggerToast("👉 Locations Saved! Next: Place Bus Stops along the blue route.");
-                  }}
+                  onClick={handleStep1ProceedToStops}
                   className="px-5 py-3 bg-emerald-600 hover:bg-emerald-700 hover:scale-[1.03] active:scale-[0.98] text-white rounded-2xl shadow-2xl font-black text-xs flex items-center gap-2 transition-transform cursor-pointer border border-emerald-500 animate-pulse"
                 >
                   <span>✅</span>
@@ -6932,21 +7218,21 @@ export default function App() {
               </div>
             )}
 
-            {/* Step 2 Instruction Details Container - Bottom-Left of Map */}
+            {/* Step 2 Instruction Details Container & Add Stop Action - Bottom-Left of Map */}
             {canEditStops && mapStep === 2 && (
-              <div className="absolute bottom-4 left-4 z-[1000] flex flex-col items-start gap-2 max-w-sm md:max-w-md pointer-events-auto">
+              <div className="absolute bottom-4 left-4 z-[1000] flex items-center gap-2.5 pointer-events-auto">
                 {!isStopPanelExpanded ? (
                   <button
                     type="button"
                     onClick={() => setIsStopPanelExpanded(true)}
-                    className="w-12 h-12 rounded-2xl bg-zinc-950/95 hover:bg-neutral-900 border border-neutral-700/80 shadow-2xl text-white flex flex-col items-center justify-center transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                    className="w-12 h-12 rounded-2xl bg-zinc-950/95 hover:bg-neutral-900 border border-neutral-700/80 shadow-2xl text-white flex flex-col items-center justify-center transition-all hover:scale-105 active:scale-95 cursor-pointer shrink-0"
                     title="Expand Step 2 Instructions"
                   >
                     <span className="text-xl font-black">▲</span>
                     <span className="text-[8px] uppercase tracking-wider font-extrabold text-neutral-400">INFO</span>
                   </button>
                 ) : (
-                  <div className="bg-zinc-950/95 border border-zinc-800 rounded-3xl p-5 shadow-2xl text-left w-full space-y-4 animate-[slide-up_0.2s_ease-out] backdrop-blur-md max-h-[280px] overflow-y-auto md:max-h-[380px]">
+                  <div className="absolute bottom-16 left-0 bg-zinc-950/95 border border-zinc-800 rounded-3xl p-5 shadow-2xl text-left w-[300px] md:w-[380px] space-y-4 animate-[slide-up_0.2s_ease-out] backdrop-blur-md max-h-[300px] overflow-y-auto md:max-h-[380px] z-[1010]">
                     <div className="flex items-center justify-between border-b border-zinc-800/40 pb-2.5">
                       <div className="flex items-center gap-2">
                         <span className="animate-pulse flex h-2.5 w-2.5 rounded-full bg-red-500"></span>
@@ -6957,7 +7243,7 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => setIsStopPanelExpanded(false)}
-                        className="text-neutral-400 hover:text-white bg-neutral-800/50 hover:bg-neutral-800 w-7 h-7 rounded-xl flex items-center justify-center font-black text-sm transition-transform hover:scale-105 active:scale-95"
+                        className="text-neutral-400 hover:text-white bg-neutral-800/50 hover:bg-neutral-800 w-7 h-7 rounded-xl flex items-center justify-center font-black text-sm transition-transform hover:scale-105 active:scale-95 cursor-pointer"
                         title="Collapse instructions"
                       >
                         ▼
@@ -6998,7 +7284,7 @@ export default function App() {
                                       </span>
                                       <button
                                         type="button"
-                                        className="text-red-400 hover:text-red-500 font-black px-1.5 py-0.5 rounded hover:bg-neutral-800/10"
+                                        className="text-red-400 hover:text-red-500 font-black px-1.5 py-0.5 rounded hover:bg-neutral-800/10 cursor-pointer"
                                         onClick={(ev) => {
                                           ev.stopPropagation();
                                           const updated = pinCStops.filter((_, i) => i !== idx);
@@ -7048,7 +7334,7 @@ export default function App() {
                               }
                               triggerToast("🪄 Re-centered Bus Stop at segment midpoint!");
                             }}
-                            className="py-2 px-3 bg-[#e2f155] text-black font-extrabold text-[9.5px] uppercase rounded-xl shadow-lg hover:scale-105 active:scale-95 transition-all text-center self-start"
+                            className="py-2 px-3 bg-[#e2f155] text-black font-extrabold text-[9.5px] uppercase rounded-xl shadow-lg hover:scale-105 active:scale-95 transition-all text-center self-start cursor-pointer"
                           >
                             🪄 Reset to Midpoint
                           </button>
@@ -7057,6 +7343,20 @@ export default function App() {
                     </div>
                   </div>
                 )}
+
+                {/* 🚏 ADD STOP BUTTON (Highlighted in red box in user photo) */}
+                <button
+                  type="button"
+                  onClick={handleAddNewStopOnRoute}
+                  className="px-4 py-3 bg-red-600 hover:bg-red-700 active:scale-95 text-white rounded-2xl shadow-2xl font-black text-xs flex items-center gap-2 border border-red-500 hover:scale-105 transition-all cursor-pointer whitespace-nowrap animate-pulse shrink-0"
+                  title={language === "ta" ? "நீலக் கோட்டில் புதிய பேருந்து நிறுத்தத்தை சேர்க்கவும்" : "Add new bus stop along the blue route line"}
+                >
+                  <PlusCircle className="w-4 h-4 text-white shrink-0" />
+                  <span className="tracking-wider uppercase font-black">ADD STOP</span>
+                  <span className="bg-red-900/80 text-white text-[10px] px-2 py-0.5 rounded-full font-mono font-bold">
+                    #{pinCStops.length + 1}
+                  </span>
+                </button>
               </div>
             )}
           </div>
@@ -7109,11 +7409,7 @@ export default function App() {
                   {pinASet && pinBSet ? (
                     <button 
                       type="button"
-                      onClick={() => {
-                        setMapStep(2);
-                        setActivePinSelector("BUS");
-                        triggerToast("👉 Locations Saved! Next: Place Bus Stops along the blue route.");
-                      }}
+                      onClick={handleStep1ProceedToStops}
                       className="py-3 px-6 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs uppercase rounded-xl cursor-pointer shadow-lg hover:scale-[1.01] transition-transform flex items-center justify-center gap-2 border border-emerald-500"
                     >
                       <span>✅ SAVE</span>

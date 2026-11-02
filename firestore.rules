@@ -26,6 +26,10 @@ service cloud.firestore {
       allow read, create, update, delete: if true;
     }
 
+    match /user_votes/{voteId} {
+      allow read, create, update, delete: if true;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
