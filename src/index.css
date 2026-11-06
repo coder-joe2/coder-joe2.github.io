@@ -27,9 +27,14 @@
 }
 
 /* Base resets & styles matching standard animations */
-html, body {
+html, body, #root {
   margin: 0;
   padding: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  background-color: #090b0f;
+  color: #f0ede8;
   font-family: var(--font-sans);
   -webkit-tap-highlight-color: transparent;
 }

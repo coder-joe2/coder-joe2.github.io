@@ -86,6 +86,7 @@ interface BusStop {
   gps?: string;      // Lat, Lng coordinates representation
   startRoute?: string; // Route starting point (e.g. Chennai)
   endRoute?: string;   // Route ending point (e.g. Karur)
+  cityRoute?: string;  // Optional Bus Stop City Name (if start & end route unknown)
   addedBy: string;   // User/Author identifier
   date: string;      // Formatted local date string
   timestamp: number; // Milliseconds for sorting
@@ -259,40 +260,39 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   throw new Error(JSON.stringify(errInfo));
 }
 
-// --- TRANSLATIONS DICTIONARY FOR LOCALIZATION ---
 const TRANSLATIONS = {
   en: {
     home_board: "Home Board",
     add_stop: "Add Stop",
     console_hub: "Console Hub",
     wishlist: "Wishlist",
-    wishlist_title: "My Starred Wishlist",
-    wishlist_desc: "Your favorited bus stop timings for quick offline and online lookup.",
+    wishlist_title: "My Wishlist",
+    wishlist_desc: "",
     no_wishlist_title: "No starred stops yet",
     no_wishlist_desc: "Mark stops with a ⭐ star on the Home Board to access them quickly here.",
     about_app: "About App",
     settings: "Settings",
     settings_title: "Settings Center",
-    settings_desc: "Manage your preferences, interface themes, and language setups.",
+    settings_desc: "",
     language_lbl: "Language",
-    language_desc: "Choose your interface language / மொழியைத் தேர்ந்தெடுக்கவும்",
+    language_desc: "Choose interface language",
     push_notifications: "Notifications",
-    push_notifications_desc: "Get notified about newly merged state bus timings",
-    offline_caching: "Strict Offline Caching",
-    offline_caching_desc: "Cache active routes and coordinates immediately for low coverage areas",
+    push_notifications_desc: "",
+    offline_caching: "Offline Caching",
+    offline_caching_desc: "",
     sign_out: "🚪 SIGN OUT",
     sign_in: "🚪 REGISTER / SIGN-IN",
     
     // TAB-1: All Bus Stops
     tn_bus_timings_board: "TN Bus Timings Board",
     tn_bus_timings_desc: "",
-    search_placeholder: "Search by state name, village, or bus name limits...",
+    search_placeholder: "Search by state name, village, or bus name...",
     district_filter: "DISTRICT:",
     all_regions: "ALL REGIONS",
-    no_match_title: "No timing boards matched your filters",
-    no_match_desc: "Search is case insensitive. Be the first to add this village stop timing to our registry boards!",
+    no_match_title: "No timing boards matched your search",
+    no_match_desc: "Try searching with a different town name or register a new timing.",
     add_timing_stop_btn: "➕ Add Timing Stop",
-    tn_registry_board_badge: "TN REGISTRY BOARD",
+    tn_registry_board_badge: "",
     bus_name_lbl: "BUS NAME/NO:",
     village_limit_lbl: "VILLAGE LIMIT:",
     more_timings: "more...",
@@ -301,57 +301,60 @@ const TRANSLATIONS = {
     // TAB-2: Add or Modify Stop
     edit_bus_stop_title: "✏️ Edit Bus Stop Timing",
     register_bus_stop_title: "➕ Register Bus Stop",
-    add_stop_desc: "Enter accurate details. Stops with identical names and locations will auto-merge timings gracefully.",
+    add_stop_desc: "",
     district_town_lbl: "District / Town*",
     village_name_lbl: "Village Name*",
     bus_number_lbl: "Bus Number / Name*",
     route_start_end_lbl: "Start to End Route",
     route_start_placeholder: "e.g. Chennai",
     route_end_placeholder: "e.g. Karur",
-    active_days_lbl: "Active Days (Days of Operation)*",
+    route_or_divider: "OR",
+    bus_stop_city_lbl: "Bus Stop City Name",
+    bus_stop_city_placeholder: "e.g. Karur, Trichy, Coimbatore",
+    active_days_lbl: "Active Days*",
     active_days_placeholder: "e.g. Sunday Only, All Days, Weekdays",
-    excluded_days_lbl: "Excluded Days (Non-Operating)",
-    excluded_days_placeholder: "e.g. Except School Holidays, Saturdays & Sundays",
+    excluded_days_lbl: "Excluded Days*",
+    excluded_days_placeholder: "e.g. Except School Holidays, Sundays, None",
     route_lbl: "Route",
     crowd_level_lbl: "Crowd Level",
-    high_crowd: "🔴 High Crowd (Rush-Hour)",
-    medium_crowd: "🟡 Medium (Moderate)",
-    low_crowd: "🟢 Low Crowd (Seats Available)",
-    departure_timings_lbl: "Departure Timings* (Build schedule list)",
-    no_timings_added: "🕒 No bus timings added yet. Create one using the selectors below!",
-    configure_departure: "Configure New Departure Time",
-    select_wheels: "Select the time using properties below",
+    high_crowd: "🔴 High Crowd",
+    medium_crowd: "🟡 Medium Crowd",
+    low_crowd: "🟢 Low Crowd",
+    departure_timings_lbl: "Departure Timings*",
+    no_timings_added: "No departure bus timings added yet.",
+    configure_departure: "Add Departure Time",
+    select_wheels: "",
     hour_lbl: "Hour",
     minute_lbl: "Minute",
-    period_lbl: "Period (AM/PM)",
+    period_lbl: "Period",
     add_departure_btn: "Add Departure Time",
-    coordinates_lbl: "Coordinates & Map Pin (Optional)",
-    gps_placeholder: "Click to type manually: Lat, Lng",
+    coordinates_lbl: "Route & Bus Stop Location*",
+    gps_placeholder: "Lat, Lng",
     choose_map_btn: "Choose on Satellite Map",
-    gps_pinned_desc: "Coordinates pin attached! Ready for route search of custom user stops.",
+    gps_pinned_desc: "✓ Coordinates attached",
     undo_edit_btn: "UNDO EDIT",
     update_board_btn: "🔄 UPDATE BOARD ENTRY",
     save_timing_btn: "✅ SAVE TIMING DETAILS",
     
     // TAB-3: Console
     console_command_hub: "Console Command Hub",
-    console_desc: "Manage, edit, or wipe custom bus stop details contributed from your user account.",
-    login_required_hub: "Login Required for Control Hub",
-    login_required_add_stop: "Login Required for Add Stop",
-    login_required_desc: "You must authenticate. Login to synchronize edits and track your contributed village bus stops in real-time.",
+    console_desc: "",
+    login_required_hub: "Login Required",
+    login_required_add_stop: "Login Required",
+    login_required_desc: "Login to track and manage your contributed village bus stops.",
     login_securely_btn: "🔒 Login Securely",
     contributor_identity_lbl: "Contributor Identity",
     saved_contributions_lbl: "Your Saved Contributions",
-    system_maintenance: "⚠️ System Maintenance Utilities",
-    system_maintenance_desc: "Perform routine formatting. You can wipe all bus timings authored under your registered account name below.",
-    clean_my_listed: "🗑️ CLEAN MY LISTED BUS TIMINGS",
-    contributions_history: "Contributions History Log",
+    system_maintenance: "System Maintenance",
+    system_maintenance_desc: "",
+    clean_my_listed: "🗑️ Clean My Listed Timings",
+    contributions_history: "Contributions History",
     no_contributions_yet: "You have not submitted any timetables yet in this session.",
     add_first_stop_btn: "➕ Add My First Stop",
     edit_lbl: "Edit",
     delete_lbl: "Wipe",
-    technical_queries: "Need immediate technical query resolutions?",
-    contact_admin: "✉️ Contact Admin Support:",
+    technical_queries: "Technical Queries",
+    contact_admin: "✉️ Admin Support:",
     
     // TAB-4: About
     about_title: "About User Stop Bus Stop Registry",
@@ -416,32 +419,32 @@ const TRANSLATIONS = {
     console_hub: "நிர்வாக மையம்",
     wishlist: "விருப்பப்பட்டியல்",
     wishlist_title: "எனது விருப்பப்பட்டியல்",
-    wishlist_desc: "எளிதாகக் கண்டறிய உங்கள் நட்சத்திரக் குறியிட்ட பேருந்து நிறுத்த அட்டவணைகள்.",
-    no_wishlist_title: "விருப்பப்பட்டியலில் எதுவும் இல்லை",
-    no_wishlist_desc: "முகப்பு பலகையில் உள்ள பேருந்து நிறுத்தங்களின் நட்சத்திர குறியை (⭐) அழுத்தி இங்கு எளிதாகக் கண்டறியவும்.",
+    wishlist_desc: "",
+    no_wishlist_title: "விருப்பப்பட்டியல் காலியாக உள்ளது",
+    no_wishlist_desc: "பேருந்து நிறுத்தங்களின் நட்சத்திர குறியை (⭐) அழுத்தி இங்கு சேர்க்கலாம்.",
     about_app: "செயலியைப் பற்றி",
     settings: "அமைப்புகள்",
     settings_title: "அமைப்புகள் மையம்",
-    settings_desc: "உங்கள் பயணத்தேர்வுகள், இடைமுக தீம்கள் மற்றும் மொழி அமைப்புகளை நிர்வகிக்கவும்.",
+    settings_desc: "",
     language_lbl: "மொழி",
-    language_desc: "உங்கள் பயன்பாட்டு மொழியைத் தேர்ந்தெடுக்கவும்",
+    language_desc: "மொழியைத் தேர்ந்தெடுக்கவும்",
     push_notifications: "அறிவிப்புகள்",
-    push_notifications_desc: "புதிதாகச் சேர்க்கப்படும் பேருந்து நேரங்களின் அறிவிப்புகளைப் பெறுங்கள்",
-    offline_caching: "முழு ஆஃப்லைன் சேமிப்பு",
-    offline_caching_desc: "இணைய வசதி குறைவாக இருந்தாலும் பார்க்க பேருந்து தடங்களைச் சேமித்து வைக்கவும்",
+    push_notifications_desc: "",
+    offline_caching: "ஆஃப்லைன் சேமிப்பு",
+    offline_caching_desc: "",
     sign_out: "🚪 வெளியேறு",
     sign_in: "🚪 உள்நுழைய / பதிவுசெய்ய",
     
     // TAB-1: All Bus Stops
     tn_bus_timings_board: "தமிழ்நாடு பேருந்து நேர பலகை",
-    tn_bus_timings_desc: "தமிழ்நாடு மக்களின் பங்களிப்புடன் நேரடி கிராமப்புற பேருந்து நேரங்களையும் புதிய வழித்தடங்களையும் கண்டறியவும்.",
-    search_placeholder: "மாவட்டம், ஊர் பெயர் அல்லது பேருந்து பெயர் கொண்டு தேடவும்...",
+    tn_bus_timings_desc: "",
+    search_placeholder: "மாவட்டம், ஊர் பெயர் அல்லது பேருந்து பெயர்...",
     district_filter: "மாவட்டம்:",
-    all_regions: "அனைத்துப் பகுதிகள்",
-    no_match_title: "எந்தப் பேருந்து நேரமும் உங்கள் தேடலுக்குப் பொருந்தவில்லை",
-    no_match_desc: "தேடல் எழுத்து வேறுபாடு அற்றது. உங்கள் ஊர் பேருந்து நேரத்தை உடனே எங்கள் பலகையில் சேர்க்கவும்!",
+    all_regions: "அனைத்தும்",
+    no_match_title: "எந்தப் பேருந்து நேரமும் பொருந்தவில்லை",
+    no_match_desc: "வேறு ஊர் பெயரைத் தேடவும் அல்லது புதிய பேருந்து நேரத்தைப் பதிவு செய்யவும்.",
     add_timing_stop_btn: "➕ பேருந்து நேரம் சேர்க்க",
-    tn_registry_board_badge: "தமிழ்நாடு பதிவக பலகை",
+    tn_registry_board_badge: "",
     bus_name_lbl: "பேருந்து பெயர்/எண்:",
     village_limit_lbl: "ஊரின் எல்லை:",
     more_timings: "கூடுதல் நேரங்கள்...",
@@ -450,57 +453,60 @@ const TRANSLATIONS = {
     // TAB-2: Add or Modify Stop
     edit_bus_stop_title: "✏️ பேருந்து நேரத்தைத் திருத்தவும்",
     register_bus_stop_title: "➕ புதிய பேருந்து நிலையத்தைப் பதிவுசெய்க",
-    add_stop_desc: "துல்லியமான விபரங்களை உள்ளிடவும். ஒரே பெயரையும் இடத்தையும் கொண்ட பேருந்து நிறுத்தங்கள் தானாகவே ஒன்றிணைக்கப்படும்.",
+    add_stop_desc: "",
     district_town_lbl: "மாவட்டம் / நகரம்*",
     village_name_lbl: "ஊர் பெயர்*",
     bus_number_lbl: "பேருந்து எண் / பெயர்*",
-    route_start_end_lbl: "ஆரம்பிக்கும் இடம் முதல் சேரும் இடம் வரை (Start to End)",
+    route_start_end_lbl: "தொடக்கம் முதல் முடிவு வழி",
     route_start_placeholder: "எ.கா. சென்னை",
     route_end_placeholder: "எ.கா. கரூர்",
-    active_days_lbl: "இயங்கும் நாட்கள் (Active Days)*",
-    active_days_placeholder: "எ.கா. ஞாயிற்றுக்கிழமை மட்டும், அனைத்து நாட்களும், வார நாட்கள்",
-    excluded_days_lbl: "தவிர்க்கப்பட்ட நாட்கள் (Excluded Days)",
-    excluded_days_placeholder: "எ.கா. பள்ளி விடுமுறை நாட்கள் தவிர, சனி மற்றும் ஞாயிறு தவிர",
+    route_or_divider: "அல்லது (OR)",
+    bus_stop_city_lbl: "பேருந்து நிறுத்த நகரம்",
+    bus_stop_city_placeholder: "எ.கா. கரூர், திருச்சி, கோயம்புத்தூர்",
+    active_days_lbl: "இயங்கும் நாட்கள்*",
+    active_days_placeholder: "எ.கா. அனைத்து நாட்களும், ஞாயிறு மட்டும்",
+    excluded_days_lbl: "தவிர்க்கப்பட்ட நாட்கள்*",
+    excluded_days_placeholder: "எ.கா. விடுமுறை நாட்கள் தவிர, இல்லை",
     route_lbl: "வழித்தடம்",
     crowd_level_lbl: "கூட்ட நெரிசல் அளவு",
-    high_crowd: "🔴 அதிக நெரிசல் (நெரிசல் நேரம்)",
-    medium_crowd: "🟡 நடுத்தரம் (மிதமானது)",
-    low_crowd: "🟢 குறைந்த நெரிசல் (இருக்கைகள் உள்ளன)",
-    departure_timings_lbl: "புறப்படும் நேரங்கள்* (பட்டியலை உருவாக்கவும்)",
-    no_timings_added: "🕒 இதுவரை பேருந்து நேரங்கள் சேர்க்கப்படவில்லை. கீழே உள்ளவற்றைத் தேர்ந்தெடுத்து உருவாக்கவும்!",
-    configure_departure: "புதிய புறப்பாட்டு நேரத்தை அமைக்கவும்",
-    select_wheels: "கீழே உள்ள எண்களைக் கொண்டு நேரத்தைத் தேர்ந்தெடுக்கவும்",
+    high_crowd: "🔴 அதிக நெரிசல்",
+    medium_crowd: "🟡 நடுத்தரம்",
+    low_crowd: "🟢 குறைந்த நெரிசல்",
+    departure_timings_lbl: "புறப்படும் நேரங்கள்*",
+    no_timings_added: "பேருந்து நேரங்கள் சேர்க்கப்படவில்லை.",
+    configure_departure: "புறப்பாட்டு நேரத்தை அமைக்கவும்",
+    select_wheels: "",
     hour_lbl: "மணி",
     minute_lbl: "நிமிடம்",
-    period_lbl: "காலம் (AM/PM)",
-    add_departure_btn: "புறப்பாட்டு நேரத்தைச் சேர்க்கவும்",
-    coordinates_lbl: "வரைபட அச்சு & இருப்பிடம் (விருப்பத்தேர்வு)",
-    gps_placeholder: "கைமுறையாக உள்ளிட: அட்சரேகை, தீர்க்கரேகை",
-    choose_map_btn: "செயற்கைக்கோள் வரைபடத்தில் தேர்வு செய்க",
-    gps_pinned_desc: "வரைபட இருப்பிடம் இணைக்கப்பட்டது! வழித்தடத் தேடலுக்குத் தயாராக உள்ளது.",
-    undo_edit_btn: "மாற்றங்களை ரத்து செய்",
-    update_board_btn: "🔄 பதிவை மாற்றியமைக்கவும்",
-    save_timing_btn: "✅ பேருந்து நேரத்தைச் சேமிக்கவும்",
+    period_lbl: "காலம்",
+    add_departure_btn: "நேரத்தைச் சேர்",
+    coordinates_lbl: "வழித்தடம் & நிறுத்த இருப்பிடம்*",
+    gps_placeholder: "அட்சரேகை, தீர்க்கரேகை",
+    choose_map_btn: "வரைபடத்தில் தேர்வு செய்க",
+    gps_pinned_desc: "✓ வரைபட இருப்பிடம் இணைக்கப்பட்டது",
+    undo_edit_btn: "ரத்து செய்",
+    update_board_btn: "🔄 மாற்றியமைக்கவும்",
+    save_timing_btn: "✅ சேமிக்கவும்",
     
     // TAB-3: Console
-    console_command_hub: "நிர்வாகக் கட்டுப்பாட்டு மையம்",
-    console_desc: "உங்கள் கணக்கிலிருந்து பதிவேற்றப்பட்ட பேருந்து நிறுத்த விபரங்களை நிர்வகிக்கவும், திருத்தவும் அல்லது அழிக்கவும்.",
-    login_required_hub: "கட்டுப்பாட்டு மையத்திற்கு உள்நுழைவு அவசியம்",
-    login_required_add_stop: "புதிய நிறுத்தத்தைச் சேர்க்க உள்நுழைவு அவசியம்",
-    login_required_desc: "மாற்றங்களைச் சேமிக்கவும் உங்கள் பங்களிப்புகளை உடனுக்குடன் கண்காணிக்கவும் உள்நுழைய வேண்டும்.",
-    login_securely_btn: "🔒 பாதுகாப்பாக உள்நுழைக",
-    contributor_identity_lbl: "பங்களிப்பாளர் அடையாளம்",
-    saved_contributions_lbl: "உங்கள் மொத்தப் பங்களிப்புகள்",
-    system_maintenance: "⚠️ கணினி பராமரிப்புப் பலகை",
-    system_maintenance_desc: "உங்கள் கணக்கின் கீழ் பதிவு செய்யப்பட்ட அனைத்து பேருந்து நேரங்களையும் நீங்கள் கீழே முற்றிலுமாக அழிக்கலாம்.",
-    clean_my_listed: "🗑️ எனது அனைத்துப் பேருந்து நேரங்களையும் அழி",
+    console_command_hub: "நிர்வாக மையம்",
+    console_desc: "",
+    login_required_hub: "உள்நுழைவு அவசியம்",
+    login_required_add_stop: "உள்நுழைவு அவசியம்",
+    login_required_desc: "உங்கள் பங்களிப்புகளைக் கண்காணிக்க உள்நுழையவும்.",
+    login_securely_btn: "🔒 உள்நுழைக",
+    contributor_identity_lbl: "பங்களிப்பாளர்",
+    saved_contributions_lbl: "உங்கள் பங்களிப்புகள்",
+    system_maintenance: "பராமரிப்பு",
+    system_maintenance_desc: "",
+    clean_my_listed: "🗑️ எனது பதிவுகளை அழி",
     contributions_history: "பங்களிப்பு வரலாறு",
-    no_contributions_yet: "இந்த அமர்வில் நீங்கள் இன்னும் எந்தப் பேருந்து தடங்களையும் பதிவேற்றவில்லை.",
-    add_first_stop_btn: "➕ எனது முதல் நிறுத்தத்தைச் சேர்",
+    no_contributions_yet: "எந்தப் பேருந்து தடங்களும் பதிவேற்றப்படவில்லை.",
+    add_first_stop_btn: "➕ முதல் நிறுத்தத்தைச் சேர்",
     edit_lbl: "தொகு",
     delete_lbl: "அழி",
-    technical_queries: "உடனடி தொழில்நுட்ப உதவி தேவையா?",
-    contact_admin: "✉️ நிர்வாக ஆதரவைத் தொடர்பு கொள்ளவும்:",
+    technical_queries: "தொழில்நுட்ப உதவி",
+    contact_admin: "✉️ நிர்வாக ஆதரவு:",
     
     // TAB-4: About
     about_title: "செயலியைப் பற்றி - User Stop பேருந்து நேரப் பதிவகம்",
@@ -651,6 +657,12 @@ export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+  // In-app Delete Confirmation Modal State (Replaces blocked window.confirm)
+  const [pendingDeleteStop, setPendingDeleteStop] = useState<{ id: string; name: string } | null>(null);
+  const [isDeletingStop, setIsDeletingStop] = useState(false);
+  const [showWipeAllConfirm, setShowWipeAllConfirm] = useState(false);
+  const [isWipingAll, setIsWipingAll] = useState(false);
+
   // Switch Toggles State for Settings
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => {
     const cached = localStorage.getItem("settings_notifications");
@@ -679,17 +691,20 @@ export default function App() {
   // Stop List State
   const [stops, setStops] = useState<BusStop[]>(() => {
     try {
+      const deletedRaw = localStorage.getItem("deleted_stops_v1");
+      const deletedIds = new Set<string>(deletedRaw ? JSON.parse(deletedRaw) : []);
       const cached = localStorage.getItem("bus_stops_cache_v1");
-      if (cached) {
+      if (cached !== null) {
         const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+        if (Array.isArray(parsed)) {
+          return parsed.filter((s: BusStop) => !deletedIds.has(s.id));
         }
       }
+      return SEED_BUS_STOPS.filter(s => !deletedIds.has(s.id));
     } catch (e) {
       // LocalStorage access or parse error fallback
     }
-    return SEED_BUS_STOPS;
+    return [];
   });
   
   // Local Map State for Interactive Card centering/zooming
@@ -717,6 +732,7 @@ export default function App() {
     location: "",
     startRoute: "",
     endRoute: "",
+    cityRoute: "",
     route: "Medium Crowd",
     timings: "",
     gps: "",
@@ -1447,7 +1463,14 @@ export default function App() {
       const crowdInput = document.getElementById(`popup_crowd_${idx}`) as HTMLSelectElement;
 
       if (nameInput && hhInput && mmInput && crowdInput) {
-        const busName = nameInput.value;
+        const busName = (nameInput.value || "").trim();
+        if (!busName) {
+          triggerToast(language === "ta" 
+            ? `⚠️ பேருந்து நிறுத்தம் ${idx + 1}-க்கான பேருந்து எண்/பெயரை (Bus Name/No) நிரப்பவும்!` 
+            : `⚠️ Please enter Bus Name / Number for Bus Stop ${idx + 1}!`);
+          nameInput.focus();
+          return;
+        }
         
         let hhNum = parseInt(hhInput.value.replace(/\D/g, ""), 10);
         if (isNaN(hhNum) || hhNum < 1 || hhNum > 12) {
@@ -1509,6 +1532,56 @@ export default function App() {
   const pickerWaypointMarkerRef = useRef<any>(null);
   const alternativePolylinesRef = useRef<any[]>([]);
   const lastValidWaypointLatLngRef = useRef<{ lat: number; lng: number } | null>(null);
+  const lastValidRouteLatLngsRef = useRef<[number, number][] | null>(null);
+  const lastValidStopsRef = useRef<any[]>([]);
+  const lastValidDistanceRef = useRef<number | null>(null);
+  const lastValidDurationRef = useRef<number | null>(null);
+
+  const getDistanceInMeters = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+    const R = 6371000;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  };
+
+  const hasBacktrackingSpur = (coords: [number, number][]): boolean => {
+    if (!coords || coords.length < 5) return false;
+    const n = coords.length;
+    for (let i = 0; i < n - 2; i++) {
+      const p1 = coords[i];
+      const p2 = coords[i + 1];
+      const latMid = (p1[0] + p2[0]) / 2;
+      const cosLat = Math.cos((latMid * Math.PI) / 180);
+      const dy1 = p2[0] - p1[0];
+      const dx1 = (p2[1] - p1[1]) * cosLat;
+      const len1 = Math.hypot(dy1, dx1);
+      if (len1 < 0.00002) continue; // Skip negligible segments
+
+      const midP = [(p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2];
+
+      for (let j = i + 2; j < n - 1; j++) {
+        const q1 = coords[j];
+        const q2 = coords[j + 1];
+        const dy2 = q2[0] - q1[0];
+        const dx2 = (q2[1] - q1[1]) * cosLat;
+        const len2 = Math.hypot(dy2, dx2);
+        if (len2 < 0.00002) continue;
+
+        const midQ = [(q1[0] + q2[0]) / 2, (q1[1] + q2[1]) / 2];
+        const dist = getDistanceInMeters(midP[0], midP[1], midQ[0], midQ[1]);
+        if (dist > 25) continue;
+
+        // Angle between segments
+        const dot = (dx1 * dx2 + dy1 * dy2) / (len1 * len2);
+        if (dot < -0.45) {
+          // Traveling in opposite directions within 25m along the same street -> dead-end spur / U-turn backtrack!
+          return true;
+        }
+      }
+    }
+    return false;
+  };
 
   const snapToRoute = (latlng: { lat: number; lng: number }): { lat: number; lng: number } => {
     if (!pickerPolylineInstance) return latlng;
@@ -1582,6 +1655,11 @@ export default function App() {
   const [routeDistance, setRouteDistance] = useState<number | null>(null);
   const [routeDuration, setRouteDuration] = useState<number | null>(null);
   const [isRouteLoading, setIsRouteLoading] = useState(false);
+  const [routeError, setRouteError] = useState<string | null>(null);
+  const routeErrorRef = useRef<string | null>(null);
+  useEffect(() => {
+    routeErrorRef.current = routeError;
+  }, [routeError]);
 
   // Filter helpers
   const [selectedDistrictFilter, setSelectedDistrictFilter] = useState("All");
@@ -2309,57 +2387,67 @@ export default function App() {
       try {
         const qStops = collection(db, "bus_updates");
         const unsubscribe = onSnapshot(qStops, (snapshot) => {
+          const deletedRaw = localStorage.getItem("deleted_stops_v1");
+          const deletedIds = new Set<string>(deletedRaw ? JSON.parse(deletedRaw) : []);
+
           if (snapshot.empty && db) {
-            // Auto-seed user bus document into Firestore so it persists online
-            try {
-              setDoc(doc(db, "bus_updates", SEED_BUS_STOPS[0].id), {
-                ...SEED_BUS_STOPS[0]
-              }).catch(() => {});
-            } catch(e) {}
+            // Only seed once on very first launch if user has never deleted the seed stop
+            const hasInitialized = localStorage.getItem("has_seeded_initial_bus_v1");
+            if (!hasInitialized && !deletedIds.has(SEED_BUS_STOPS[0].id)) {
+              localStorage.setItem("has_seeded_initial_bus_v1", "true");
+              try {
+                setDoc(doc(db, "bus_updates", SEED_BUS_STOPS[0].id), {
+                  ...SEED_BUS_STOPS[0]
+                }).catch(() => {});
+              } catch(e) {}
+            }
           }
 
-          const remoteStops: BusStop[] = snapshot.docs.map(doc => {
-            const data = doc.data() as any;
-            
-            // Defensively normalize timings into array of strings
-            let parsedTimings: string[] = [];
-            if (Array.isArray(data.timings)) {
-              parsedTimings = data.timings.map(String).filter(Boolean);
-            } else if (typeof data.timings === "string" && data.timings.trim()) {
-              parsedTimings = data.timings.split(",").map((s: string) => s.trim()).filter(Boolean);
-            }
-            if (parsedTimings.length === 0) {
-              parsedTimings = ["06:15 AM", "10:45 AM", "02:30 PM", "06:15 PM"];
-            }
+          const remoteStops: BusStop[] = snapshot.docs
+            .map(doc => {
+              const data = doc.data() as any;
+              
+              // Defensively normalize timings into array of strings
+              let parsedTimings: string[] = [];
+              if (Array.isArray(data.timings)) {
+                parsedTimings = data.timings.map(String).filter(Boolean);
+              } else if (typeof data.timings === "string" && data.timings.trim()) {
+                parsedTimings = data.timings.split(",").map((s: string) => s.trim()).filter(Boolean);
+              }
+              if (parsedTimings.length === 0) {
+                parsedTimings = ["06:15 AM", "10:45 AM", "02:30 PM", "06:15 PM"];
+              }
 
-            const rawLocation = data.location || "5B, 5B, 5B";
-            const endRouteVal = data.endRoute || "Uppidamangalam";
-            const nameVal = data.name || (rawLocation.includes(",") ? "Karur" : rawLocation) || "Karur";
-            const villageVal = data.village || endRouteVal || "Uppidamangalam";
+              const rawLocation = data.location || "5B, 5B, 5B";
+              const endRouteVal = data.endRoute || "Uppidamangalam";
+              const nameVal = data.name || (rawLocation.includes(",") ? "Karur" : rawLocation) || "Karur";
+              const villageVal = data.village || endRouteVal || "Uppidamangalam";
 
-            return {
-              id: doc.id,
-              name: nameVal,
-              village: villageVal,
-              location: rawLocation,
-              startRoute: data.startRoute || "Karur Bus Stand",
-              endRoute: endRouteVal,
-              route: data.route || "Regular Route",
-              timings: parsedTimings,
-              gps: data.gps || "Bus Stop 1: 10.934766, 78.150518 (5B) [Dep: 06:15 AM]",
-              addedBy: data.addedBy || "Personal",
-              creatorId: data.creatorId || data.userId || data.uid || null,
-              creatorEmail: data.creatorEmail || "p99705270@gmail.com",
-              date: data.date || "23/7/2026",
-              timestamp: typeof data.timestamp === "number" ? data.timestamp : (Date.parse(data.date) || 1784764800000),
-              activeDays: data.activeDays || "All Days",
-              excludedDays: data.excludedDays || "",
-              likeCount: Math.max(0, typeof data.likeCount === "number" ? data.likeCount : 11),
-              dislikeCount: Math.max(0, typeof data.dislikeCount === "number" ? data.dislikeCount : 0),
-              likedUsers: Array.isArray(data.likedUsers) ? data.likedUsers.map(String) : [],
-              dislikedUsers: Array.isArray(data.dislikedUsers) ? data.dislikedUsers.map(String) : []
-            };
-          });
+              return {
+                id: doc.id,
+                name: nameVal,
+                village: villageVal,
+                location: rawLocation,
+                startRoute: data.startRoute || "Karur Bus Stand",
+                endRoute: endRouteVal,
+                cityRoute: data.cityRoute || "",
+                route: data.route || "Regular Route",
+                timings: parsedTimings,
+                gps: data.gps || "Bus Stop 1: 10.934766, 78.150518 (5B) [Dep: 06:15 AM]",
+                addedBy: data.addedBy || "Personal",
+                creatorId: data.creatorId || data.userId || data.uid || null,
+                creatorEmail: data.creatorEmail || "p99705270@gmail.com",
+                date: data.date || "23/7/2026",
+                timestamp: typeof data.timestamp === "number" ? data.timestamp : (Date.parse(data.date) || 1784764800000),
+                activeDays: data.activeDays || "All Days",
+                excludedDays: data.excludedDays || "",
+                likeCount: Math.max(0, typeof data.likeCount === "number" ? data.likeCount : 11),
+                dislikeCount: Math.max(0, typeof data.dislikeCount === "number" ? data.dislikeCount : 0),
+                likedUsers: Array.isArray(data.likedUsers) ? data.likedUsers.map(String) : [],
+                dislikedUsers: Array.isArray(data.dislikedUsers) ? data.dislikedUsers.map(String) : []
+              };
+            })
+            .filter(stop => !deletedIds.has(stop.id));
 
           // Sort in-memory safely (handles missing timestamp fields from raw Firestore documents)
           remoteStops.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
@@ -2367,8 +2455,8 @@ export default function App() {
           // Update stops with real-time remote data from Firestore
           setStops(prevStops => {
             const remoteIds = new Set(remoteStops.map(s => s.id));
-            const localOnly = prevStops.filter(p => (p.id.startsWith("local-") || p.id.startsWith("off-")) && !remoteIds.has(p.id));
-            const merged = remoteStops.length > 0 ? [...remoteStops, ...localOnly] : prevStops;
+            const localOnly = prevStops.filter(p => (p.id.startsWith("local-") || p.id.startsWith("off-")) && !remoteIds.has(p.id) && !deletedIds.has(p.id));
+            const merged = [...remoteStops, ...localOnly];
             try {
               localStorage.setItem("bus_stops_cache_v1", JSON.stringify(merged));
             } catch (e) {}
@@ -2472,7 +2560,7 @@ export default function App() {
     start: { lat: number; lng: number },
     end: { lat: number; lng: number },
     targetPolyline: any = null,
-    waypoint: { lat: number; lng: number } | null | undefined = undefined,
+    stopsOrWaypoint: { lat: number; lng: number }[] | { lat: number; lng: number } | null | undefined = undefined,
     mapInstanceToUse: any = null
   ): Promise<boolean> => {
     const poly = targetPolyline || pickerPolylineInstance;
@@ -2491,31 +2579,185 @@ export default function App() {
       }
     };
 
-    const activeWaypoint = waypoint !== undefined ? waypoint : waypointLatLngRef.current;
-
     setIsRouteLoading(true);
     try {
-      let url = "";
-      if (activeWaypoint) {
-        url = `https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${activeWaypoint.lng},${activeWaypoint.lat};${end.lng},${end.lat}?overview=full&geometries=geojson&alternatives=true`;
-      } else {
-        url = `https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${end.lng},${end.lat}?overview=full&geometries=geojson&alternatives=true`;
+      // Build points array: start -> intermediate stops / waypoint -> end
+      const allPoints: { lat: number; lng: number }[] = [{ lat: start.lat, lng: start.lng }];
+
+      if (Array.isArray(stopsOrWaypoint)) {
+        stopsOrWaypoint.forEach(s => {
+          if (s && typeof s.lat === 'number' && typeof s.lng === 'number' && !isNaN(s.lat) && !isNaN(s.lng)) {
+            allPoints.push({ lat: s.lat, lng: s.lng });
+          }
+        });
+      } else if (stopsOrWaypoint && typeof (stopsOrWaypoint as any).lat === 'number' && !isNaN((stopsOrWaypoint as any).lat)) {
+        allPoints.push({ lat: (stopsOrWaypoint as any).lat, lng: (stopsOrWaypoint as any).lng });
+      } else if (mapStepRef.current === 2 && pinCStopsRef.current && pinCStopsRef.current.length > 0) {
+        pinCStopsRef.current.forEach(s => {
+          if (s && typeof s.lat === 'number' && typeof s.lng === 'number' && !isNaN(s.lat) && !isNaN(s.lng)) {
+            allPoints.push({ lat: s.lat, lng: s.lng });
+          }
+        });
+      } else if (waypointLatLngRef.current) {
+        allPoints.push(waypointLatLngRef.current);
       }
+
+      allPoints.push({ lat: end.lat, lng: end.lng });
+
+      const coordString = allPoints.map(p => `${p.lng},${p.lat}`).join(";");
+      const hasIntermediate = allPoints.length > 2;
+      // OSRM only supports alternatives=true when there are exactly 2 points
+      const url = `https://router.project-osrm.org/route/v1/driving/${coordString}?overview=full&geometries=geojson${hasIntermediate ? "" : "&alternatives=true"}`;
 
       const response = await fetch(url);
       if (!response.ok) {
-        throw new Error("OSRM routing request failed");
+        throw new Error("OSRM routing request failed with HTTP " + response.status);
       }
       const data = await response.json();
       if (data.code === "Ok" && data.routes && data.routes.length > 0) {
-        // Clear previous alternatives
-        clearAlts();
+        // If intermediate stops exist, verify that every bus stop is close to a valid connecting road
+        let hasUnconnectedStop = false;
+        const currentStops = Array.isArray(stopsOrWaypoint)
+          ? stopsOrWaypoint
+          : (stopsOrWaypoint ? [stopsOrWaypoint] : pinCStopsRef.current);
+
+        if (hasIntermediate && data.waypoints && data.waypoints.length >= 3) {
+          for (let i = 1; i < data.waypoints.length - 1; i++) {
+            const wp = data.waypoints[i];
+            // If distance between user's dropped point and the nearest road is > 65 meters (e.g. dropped in a field / house block without a road)
+            if (wp && typeof wp.distance === "number" && wp.distance > 65) {
+              hasUnconnectedStop = true;
+              break;
+            }
+          }
+        }
 
         const primaryRoute = data.routes[0];
         const coordinates = primaryRoute.geometry.coordinates; // Array of [lng, lat]
         const latLngs = coordinates.map((coord: [number, number]) => [coord[1], coord[0]]);
-        
+
+        const firstCoord = latLngs[0];
+        const lastCoord = latLngs[latLngs.length - 1];
+        const distToStart = getDistanceInMeters(firstCoord[0], firstCoord[1], start.lat, start.lng);
+        const distToEnd = getDistanceInMeters(lastCoord[0], lastCoord[1], end.lat, end.lng);
+        const hasSpur = hasIntermediate && hasBacktrackingSpur(latLngs);
+
+        if (hasUnconnectedStop || distToEnd > 65 || distToStart > 65 || hasSpur) {
+          clearAlts();
+          setRouteError("Route not available");
+
+          // Inform user with exact reason
+          const errMsg = hasSpur
+            ? (language === "ta" 
+                ? "⚠️ கூடுதல் முட்டுச்சந்து (Dead-end spur) கண்டறியப்பட்டது! Route not available. முந்தைய சரியான வழித்தடத்திற்கு மீட்டமைக்கப்பட்டது." 
+                : "⚠️ Dead-end spur detected! Route not available. Reverted to previous valid route.")
+            : (distToEnd > 65
+                ? (language === "ta"
+                    ? "⚠️ முடிவு புள்ளியுடன் (END pin) பாதை இணையவில்லை! Route not available. முந்தைய சரியான வழித்தடத்திற்கு மீட்டமைக்கப்பட்டது."
+                    : "⚠️ Route does not connect to END pin! Route not available. Reverted to previous valid route.")
+                : (language === "ta"
+                    ? "⚠️ வழித்தடம் கிடைக்கவில்லை (Route not available)! முந்தைய சரியான வழித்தடத்திற்கு மீட்டமைக்கப்பட்டது."
+                    : "⚠️ Route not available! Reverted to previous valid route."));
+
+          triggerToast(errMsg);
+
+          // Revert polyline to previous valid path
+          if (lastValidRouteLatLngsRef.current && lastValidRouteLatLngsRef.current.length > 0) {
+            poly.setLatLngs(lastValidRouteLatLngsRef.current);
+            if (poly.setStyle) {
+              poly.setStyle({
+                color: "#3b82f6",
+                weight: 10,
+                opacity: 0.88,
+                dashArray: undefined
+              });
+            }
+          }
+
+          // Revert bus stop markers and state to previous valid positions
+          if (lastValidStopsRef.current && lastValidStopsRef.current.length > 0) {
+            const prevStops = [...lastValidStopsRef.current];
+            setPinCStops(prevStops);
+            pinCStopsRef.current = prevStops;
+            syncStopsToRegistry(prevStops);
+            prevStops.forEach((st, idx) => {
+              if (pinCMarkersRef.current && pinCMarkersRef.current[idx]) {
+                try {
+                  pinCMarkersRef.current[idx].setLatLng([st.lat, st.lng]);
+                } catch (e) {}
+              }
+            });
+            if (prevStops.length > 0) {
+              setBusStopLatLng(prevStops[0]);
+            }
+          }
+
+          if (lastValidDistanceRef.current !== null) {
+            setRouteDistance(lastValidDistanceRef.current);
+          }
+          if (lastValidDurationRef.current !== null) {
+            setRouteDuration(lastValidDurationRef.current);
+          }
+
+          setTimeout(() => {
+            setRouteError(null);
+          }, 3000);
+
+          return false;
+        }
+
+        // Clean valid route!
+        clearAlts();
+        setRouteError(null);
+
         poly.setLatLngs(latLngs);
+        if (poly.setStyle) {
+          poly.setStyle({
+            color: "#3b82f6", // Vibrant modern blue for connected road route
+            weight: 10,
+            opacity: 0.88,
+            dashArray: undefined
+          });
+        }
+
+        // CRITICAL: Snap every bus stop pin directly onto the blue line road coordinate!
+        if (hasIntermediate && data.waypoints && data.waypoints.length >= 3 && currentStops && currentStops.length > 0) {
+          const updatedStops = [...currentStops];
+          let updatedAny = false;
+
+          for (let i = 0; i < currentStops.length; i++) {
+            const wp = data.waypoints[1 + i];
+            if (wp && wp.location && wp.location.length >= 2) {
+              const roadCoord = { lat: wp.location[1], lng: wp.location[0] };
+              updatedStops[i] = {
+                ...updatedStops[i],
+                lat: roadCoord.lat,
+                lng: roadCoord.lng
+              };
+              updatedAny = true;
+
+              // Immediately reposition map marker directly onto the road / blue line
+              if (pinCMarkersRef.current && pinCMarkersRef.current[i]) {
+                try {
+                  pinCMarkersRef.current[i].setLatLng([roadCoord.lat, roadCoord.lng]);
+                } catch (e) {}
+              }
+
+              if (i === 0) {
+                setBusStopLatLng(roadCoord);
+              }
+            }
+          }
+
+          if (updatedAny) {
+            setPinCStops(updatedStops);
+            pinCStopsRef.current = updatedStops;
+            syncStopsToRegistry(updatedStops);
+          }
+          lastValidStopsRef.current = updatedStops;
+        } else if (!hasIntermediate) {
+          lastValidStopsRef.current = [];
+        }
         
         // Convert distance to km and duration to minutes
         const distKm = primaryRoute.distance / 1000;
@@ -2523,9 +2765,14 @@ export default function App() {
         setRouteDistance(distKm);
         setRouteDuration(durMin);
 
-        // Draw alternative routes if they exist
+        // Save snapshot of valid route and stops for future reversion
+        lastValidRouteLatLngsRef.current = latLngs;
+        lastValidDistanceRef.current = distKm;
+        lastValidDurationRef.current = durMin;
+
+        // Draw alternative routes if they exist (only for 2 points without intermediate waypoints)
         const L = (window as any).L;
-        if (L && map && data.routes.length > 1) {
+        if (L && map && data.routes.length > 1 && !hasIntermediate) {
           const altRoutes = data.routes.slice(1, 4); // up to 3 alternatives
           altRoutes.forEach((altRoute: any, idx: number) => {
             const altCoords = altRoute.geometry.coordinates;
@@ -2563,17 +2810,87 @@ export default function App() {
 
         return true;
       } else {
-        // Fallback straight line
-        poly.setLatLngs([[start.lat, start.lng], [end.lat, end.lng]]);
-        setRouteDistance(null);
-        setRouteDuration(null);
+        // No connected route between points!
+        clearAlts();
+        setRouteError("Route not available");
+        triggerToast(language === "ta"
+          ? "⚠️ வழித்தடம் கிடைக்கவில்லை (Route not available)! முந்தைய சரியான வழித்தடத்திற்கு மீட்டமைக்கப்பட்டது."
+          : "⚠️ Route not available! Reverted to previous valid route."
+        );
+        if (lastValidRouteLatLngsRef.current && lastValidRouteLatLngsRef.current.length > 0) {
+          poly.setLatLngs(lastValidRouteLatLngsRef.current);
+          if (poly.setStyle) {
+            poly.setStyle({
+              color: "#3b82f6",
+              weight: 10,
+              opacity: 0.88,
+              dashArray: undefined
+            });
+          }
+        }
+        if (lastValidStopsRef.current && lastValidStopsRef.current.length > 0) {
+          const prevStops = [...lastValidStopsRef.current];
+          setPinCStops(prevStops);
+          pinCStopsRef.current = prevStops;
+          syncStopsToRegistry(prevStops);
+          prevStops.forEach((st, idx) => {
+            if (pinCMarkersRef.current && pinCMarkersRef.current[idx]) {
+              try {
+                pinCMarkersRef.current[idx].setLatLng([st.lat, st.lng]);
+              } catch (e) {}
+            }
+          });
+          if (prevStops.length > 0) {
+            setBusStopLatLng(prevStops[0]);
+          }
+        }
+        if (lastValidDistanceRef.current !== null) {
+          setRouteDistance(lastValidDistanceRef.current);
+        }
+        if (lastValidDurationRef.current !== null) {
+          setRouteDuration(lastValidDurationRef.current);
+        }
+        setTimeout(() => setRouteError(null), 3000);
         return false;
       }
     } catch (error) {
-      console.warn("OSRM routing service failed, falling back to straight-line polyline:", error);
-      poly.setLatLngs([[start.lat, start.lng], [end.lat, end.lng]]);
-      setRouteDistance(null);
-      setRouteDuration(null);
+      console.warn("OSRM routing service failed or no route:", error);
+      clearAlts();
+      setRouteError("Route not available");
+      if (lastValidRouteLatLngsRef.current && lastValidRouteLatLngsRef.current.length > 0) {
+        poly.setLatLngs(lastValidRouteLatLngsRef.current);
+        if (poly.setStyle) {
+          poly.setStyle({
+            color: "#3b82f6",
+            weight: 10,
+            opacity: 0.88,
+            dashArray: undefined
+          });
+        }
+      }
+      if (lastValidStopsRef.current && lastValidStopsRef.current.length > 0) {
+        const prevStops = [...lastValidStopsRef.current];
+        setPinCStops(prevStops);
+        pinCStopsRef.current = prevStops;
+        syncStopsToRegistry(prevStops);
+        prevStops.forEach((st, idx) => {
+          if (pinCMarkersRef.current && pinCMarkersRef.current[idx]) {
+            try {
+              pinCMarkersRef.current[idx].setLatLng([st.lat, st.lng]);
+            } catch (e) {}
+          }
+        });
+        if (prevStops.length > 0) {
+          setBusStopLatLng(prevStops[0]);
+        }
+      }
+      if (lastValidDistanceRef.current !== null) {
+        setRouteDistance(lastValidDistanceRef.current);
+      }
+      if (lastValidDurationRef.current !== null) {
+        setRouteDuration(lastValidDurationRef.current);
+      }
+      setTimeout(() => setRouteError(null), 3000);
       return false;
     } finally {
       setIsRouteLoading(false);
@@ -2665,12 +2982,12 @@ export default function App() {
           });
 
           const markerA = L.marker([pinALatLng.lat, pinALatLng.lng], {
-            draggable: canEditStops,
+            draggable: canEditStops && mapStepRef.current === 1,
             icon: iconA
           }).bindTooltip("📍 Start Location", { permanent: false });
 
           const markerB = L.marker([pinBLatLng.lat, pinBLatLng.lng], {
-            draggable: canEditStops,
+            draggable: canEditStops && mapStepRef.current === 1,
             icon: iconB
           }).bindTooltip("📍 End Location", { permanent: false });
 
@@ -2756,9 +3073,11 @@ export default function App() {
               const newStopCoords = snappedMaybe;
               setPinCStops(prev => {
                 const next = [...prev, newStopCoords];
+                pinCStopsRef.current = next;
                 triggerToast(`🔴 Placed Bus Stop ${next.length}!`);
                 setActiveStopPopupIdx(next.length - 1);
                 syncStopsToRegistry(next);
+                fetchOSRMRoute(pinALatLng, pinBLatLng, polyInstance, next, mapInstance);
                 return next;
               });
               setBusStopLatLng(newStopCoords);
@@ -2807,7 +3126,7 @@ export default function App() {
 
           // Synchronization helpers for fluid drag experiences
           const syncPositionsDrag = () => {
-            if (!canEditStops) return;
+            if (!canEditStops || mapStepRef.current !== 1) return;
             const pA = markerA.getLatLng();
             const pB = markerB.getLatLng();
             if (pinASetRef.current && pinBSetRef.current) {
@@ -2818,7 +3137,7 @@ export default function App() {
           };
 
           const syncPositionsDragEnd = () => {
-            if (!canEditStops) return;
+            if (!canEditStops || mapStepRef.current !== 1) return;
             const pA = markerA.getLatLng();
             const pB = markerB.getLatLng();
             setPinALatLng({ lat: pA.lat, lng: pA.lng });
@@ -3032,6 +3351,15 @@ export default function App() {
 
       pickerMarkerInstance.setIcon(iconA);
       pickerMarkerBInstance.setIcon(iconB);
+
+      // Lock Start and End pins in Step 2: Only bus stops can be moved!
+      if (canEditStops && mapStep === 1) {
+        if (pickerMarkerInstance.dragging) pickerMarkerInstance.dragging.enable();
+        if (pickerMarkerBInstance.dragging) pickerMarkerBInstance.dragging.enable();
+      } else {
+        if (pickerMarkerInstance.dragging) pickerMarkerInstance.dragging.disable();
+        if (pickerMarkerBInstance.dragging) pickerMarkerBInstance.dragging.disable();
+      }
     }
   }, [mapStep, pickerMarkerInstance, pickerMarkerBInstance, canEditStops]);
 
@@ -3272,37 +3600,57 @@ export default function App() {
           setActiveStopPopupIdx(idx);
         });
 
+        busMarker.on("dragstart", () => {
+          try {
+            busMarker.closePopup();
+          } catch (e) {}
+        });
+
         busMarker.on("drag", (dragEvent: any) => {
           if (!canEditStops) return;
           const pos = dragEvent.target.getLatLng();
-          const snapped = snapToRoute({ lat: pos.lat, lng: pos.lng });
-          busMarker.setLatLng([snapped.lat, snapped.lng]);
+          busMarker.setLatLng(pos);
 
           const updated = [...pinCStopsRef.current];
           if (updated[idx]) {
-            updated[idx] = { ...updated[idx], ...snapped };
+            updated[idx] = { ...updated[idx], lat: pos.lat, lng: pos.lng };
             pinCStopsRef.current = updated;
             if (idx === 0) {
-              setBusStopLatLng(snapped);
+              setBusStopLatLng({ lat: pos.lat, lng: pos.lng });
             }
           }
         });
 
-        busMarker.on("dragend", (dragEvent: any) => {
+        busMarker.on("dragend", async (dragEvent: any) => {
           if (!canEditStops) return;
           const pos = dragEvent.target.getLatLng();
-          const snapped = snapToRoute({ lat: pos.lat, lng: pos.lng });
-          busMarker.setLatLng([snapped.lat, snapped.lng]);
+          busMarker.setLatLng(pos);
 
           const updated = [...pinCStopsRef.current];
           if (updated[idx]) {
-            updated[idx] = { ...updated[idx], ...snapped };
+            updated[idx] = { ...updated[idx], lat: pos.lat, lng: pos.lng };
             setPinCStops(updated);
+            pinCStopsRef.current = updated;
             syncStopsToRegistry(updated);
             if (idx === 0) {
-              setBusStopLatLng(snapped);
+              setBusStopLatLng({ lat: pos.lat, lng: pos.lng });
             }
-            triggerToast(`📍 Bus Stop ${idx + 1} position updated!`);
+
+            // Recalculate road route linking Start -> all Bus Stops -> End
+            const success = await fetchOSRMRoute(
+              pinALatLng,
+              pinBLatLng,
+              pickerPolylineInstance,
+              updated,
+              pickerMapInstance
+            );
+
+            if (success) {
+              triggerToast(language === "ta" 
+                ? `✅ பேருந்து நிறுத்தம் ${idx + 1} நீலக் கோட்டில் சரியாக இணைக்கப்பட்டது!` 
+                : `✅ Bus Stop ${idx + 1} connected directly on the blue route line!`
+              );
+            }
           }
         });
 
@@ -3315,6 +3663,7 @@ export default function App() {
             // Delete this coordinate
             const updated = pinCStopsRef.current.filter((_, i) => i !== idx);
             setPinCStops(updated);
+            pinCStopsRef.current = updated;
             syncStopsToRegistry(updated);
             if (updated.length > 0) {
               setBusStopLatLng(updated[0]);
@@ -3323,6 +3672,7 @@ export default function App() {
               setBusPinSet(false);
               setActiveStopPopupIdx(null);
             }
+            fetchOSRMRoute(pinALatLng, pinBLatLng, pickerPolylineInstance, updated, pickerMapInstance);
             triggerToast(`✕ Removed Bus Stop ${idx + 1}`);
           } else {
             setActiveStopPopupIdx(idx);
@@ -3441,25 +3791,71 @@ export default function App() {
     e.preventDefault();
 
     if (!userSession) {
-      alert("❗ Please login first to save and contribute bus timings.");
+      triggerToast(language === "ta" ? "❗ பேருந்து விபரங்களைச் சேர்க்க முதலில் உள்நுழைக!" : "❗ Please login first to save and contribute bus timings.");
       setActiveTab("login");
       return;
     }
 
-    const { name, village, location, startRoute, endRoute, route, timings, gps, activeDays, excludedDays } = formData;
+    const { name, village, location, startRoute, endRoute, cityRoute, route, timings, gps, activeDays, excludedDays } = formData;
 
+    // 1. Mandatory Confirmation: Town Name
     if (!name.trim()) {
-      alert("❗ Please enter District/Name (e.g. Karur, Trichy)!");
+      triggerToast(language === "ta" 
+        ? "❗ மாவட்டம் / ஊர் பெயரை (Town Name) கட்டாயம் உள்ளிடவும்!" 
+        : "❗ Please enter District / Town Name (e.g. Karur, Trichy)!");
       return;
     }
-    if (!location.trim()) {
-      alert("❗ Please specify Bus Name/ID!");
+
+    // 2. Mandatory Confirmation: (Start and End Route) OR (Bus Stop City Name)
+    const hasStartAndEnd = Boolean(startRoute?.trim() && endRoute?.trim());
+    const hasCityRoute = Boolean(cityRoute?.trim());
+    if (!hasStartAndEnd && !hasCityRoute) {
+      triggerToast(language === "ta"
+        ? "❗ 'தொடக்கம் & முடிவு வழி' அல்லது 'பேருந்து நிறுத்த நகரம்' இரண்டில் ஒன்றை கட்டாயம் உள்ளிடவும்!"
+        : "❗ Please provide either 'Start to End Route' OR 'Bus Stop City Name'!");
       return;
     }
-    if (!timings.trim()) {
-      alert("❗ Please add at least one Bus Timing!");
+
+    // 3. Mandatory Confirmation: Active Days
+    if (!activeDays?.trim()) {
+      triggerToast(language === "ta"
+        ? "❗ இயங்கும் நாட்களைக் (Active Days) கட்டாயம் உள்ளிடவும் அல்லது தேர்ந்தெடுக்கவும்!"
+        : "❗ Please specify Active Days (Days of Operation)!");
       return;
     }
+
+    // 4. Mandatory Confirmation: Excluded Days
+    if (!excludedDays?.trim()) {
+      triggerToast(language === "ta"
+        ? "❗ தவிர்க்கப்பட்ட நாட்களைக் (Excluded Days) கட்டாயம் உள்ளிடவும் (அல்லது 'இல்லை / None' எனத் தேர்ந்தெடுக்கவும்)!"
+        : "❗ Please specify Excluded Days (or choose 'None' if operating daily)!");
+      return;
+    }
+
+    // 5. Mandatory Confirmation: Route Coordinates
+    if (!gps?.trim() || gpsStatus === "none") {
+      triggerToast(language === "ta"
+        ? "❗ வரைபடத்தில் (Choose on Map) பாதையையும் பேருந்து நிறுத்தங்களையும் கட்டாயம் குறித்துச் சேமிக்கவும்!"
+        : "❗ Please pin route and Bus Stop coordinates on the map!");
+      return;
+    }
+
+    // 6. Mandatory Confirmation: Inside created bus stops, all required informations must be filled
+    if (pinCStops.length > 0) {
+      const missingIdx = pinCStops.findIndex(p => !p.busName || !p.busName.trim());
+      if (missingIdx !== -1) {
+        triggerToast(language === "ta"
+          ? `❗ வரைபடத்தில் பேருந்து நிறுத்தம் ${missingIdx + 1}-க்கான பேருந்து எண்/பெயர் (Bus Name/No) விடுபட்டுள்ளது! வரைபடத்தில் பூர்த்தி செய்யவும்.`
+          : `❗ Bus Stop ${missingIdx + 1} is missing Bus Name/Number! Please complete on map.`);
+        setMapStep(2);
+        setActiveStopPopupIdx(missingIdx);
+        setMapModalOpen(true);
+        return;
+      }
+    }
+
+    // Bus Name / ID fallback from pinCStops
+    const resolvedBusName = location.trim() || pinCStops.map(p => p.busName?.trim()).filter(Boolean).join(", ") || "Local Bus";
 
     // Parsing timings formatted commas
     const timingPills = timings
@@ -3468,7 +3864,9 @@ export default function App() {
       .filter(Boolean);
 
     if (timingPills.length === 0) {
-      alert("❗ No valid timings parsed! Use commas (e.g. 8:30 AM, 12:00 PM)");
+      triggerToast(language === "ta" 
+        ? "❗ குறைந்தபட்சம் ஒரு பேருந்து நேரமாவது (Departure Timing) சேர்க்கவும்!" 
+        : "❗ Please add at least one Bus Timing!");
       return;
     }
 
@@ -3478,13 +3876,14 @@ export default function App() {
     const existingIndex = stops.findIndex(
       s => cleanStr(s.name) === cleanStr(name) && 
            cleanStr(s.village) === cleanStr(village) && 
-           cleanStr(s.location) === cleanStr(location) &&
+           cleanStr(s.location) === cleanStr(resolvedBusName) &&
            (editModeId ? s.id !== editModeId : true)
      );
 
     // Document payload
     const currentDate = new Date().toLocaleDateString("en-IN");
     const currentTimestamp = Date.now();
+    const finalVillage = (village || cityRoute || endRoute || name).trim();
 
     try {
       if (editModeId) {
@@ -3496,10 +3895,11 @@ export default function App() {
           const editPayload: BusStop = {
             ...updatedStops[editIndex],
             name: name.trim(),
-            village: village.trim(),
-            location: location.trim(),
+            village: finalVillage,
+            location: resolvedBusName,
             startRoute: (startRoute || "").trim(),
             endRoute: (endRoute || "").trim(),
+            cityRoute: (cityRoute || "").trim(),
             route,
             timings: timingPills,
             gps: gps.trim(),
@@ -3514,10 +3914,11 @@ export default function App() {
             try {
               await updateDoc(doc(db, "bus_updates", editModeId), {
                 name: name.trim(),
-                village: village.trim(),
-                location: location.trim(),
+                village: finalVillage,
+                location: resolvedBusName,
                 startRoute: (startRoute || "").trim(),
                 endRoute: (endRoute || "").trim(),
+                cityRoute: (cityRoute || "").trim(),
                 route,
                 timings: timingPills,
                 gps: gps.trim(),
@@ -3570,10 +3971,11 @@ export default function App() {
         // Add completely new bus stop registry
         const newStop: Omit<BusStop, "id"> = {
           name: name.trim(),
-          village: village.trim(),
-          location: location.trim(),
+          village: finalVillage,
+          location: resolvedBusName,
           startRoute: (startRoute || "").trim(),
           endRoute: (endRoute || "").trim(),
+          cityRoute: (cityRoute || "").trim(),
           route,
           timings: timingPills,
           gps: gps.trim(),
@@ -3601,6 +4003,16 @@ export default function App() {
           }
         }
 
+        // Remove from deleted tombstone list if present
+        try {
+          const deletedRaw = localStorage.getItem("deleted_stops_v1");
+          if (deletedRaw) {
+            const deletedArr: string[] = JSON.parse(deletedRaw);
+            const cleaned = deletedArr.filter(dId => dId !== generatedId);
+            localStorage.setItem("deleted_stops_v1", JSON.stringify(cleaned));
+          }
+        } catch (e) {}
+
         const addedStopWithId: BusStop = { ...newStop, id: generatedId };
         handleStopsStateUpdate([addedStopWithId, ...stops]);
         triggerToast(language === "ta" ? "🎉 பேருந்து விபரங்கள் ஃபயர்பேஸில் சேமிக்கப்பட்டு முகப்பு பலகையில் வெளியிடப்பட்டது!" : "🎉 Bus stop saved to Firebase & published to Home Board!");
@@ -3613,6 +4025,7 @@ export default function App() {
         location: "",
         startRoute: "",
         endRoute: "",
+        cityRoute: "",
         route: "Medium Crowd",
         timings: "",
         gps: "",
@@ -3628,7 +4041,7 @@ export default function App() {
     } catch (error: any) {
       console.error("Submission failed entirely", error);
       const specificMsg = error instanceof Error ? error.message : String(error);
-      alert(`❌ Submission error occurred. Details: ${specificMsg}`);
+      triggerToast(`❌ Submission error occurred. ${specificMsg}`);
     }
   };
 
@@ -3640,6 +4053,7 @@ export default function App() {
       location: stop.location,
       startRoute: stop.startRoute || "",
       endRoute: stop.endRoute || "",
+      cityRoute: stop.cityRoute || "",
       route: stop.route,
       timings: (stop.timings || []).join(", "),
       gps: stop.gps || "",
@@ -3657,56 +4071,109 @@ export default function App() {
     setSelectedStopId(null);
   };
 
-  // Delete single busTiming stop
-  const handleDeleteStop = async (id: string) => {
-    if (!window.confirm("⚠️ Are you sure you want to delete this bus timing?")) {
-      return;
+  // Delete single busTiming stop - Safe In-App Confirmation (no window.confirm iframe blockers)
+  const handleDeleteStop = (id: string, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
     }
+    const target = stops.find(s => s.id === id);
+    const stopName = target 
+      ? `${target.name} · ${target.village || target.location}` 
+      : (language === "ta" ? "பேருந்து நிறுத்தம்" : "Bus Timing");
+    setPendingDeleteStop({ id, name: stopName });
+  };
+
+  const executeConfirmDeleteStop = async () => {
+    if (!pendingDeleteStop) return;
+    const id = pendingDeleteStop.id;
+    setIsDeletingStop(true);
 
     try {
-      // 1. Update local UI state immediately for instant feedback on board and history log
-      setStops(prevStops => prevStops.filter(s => s.id !== id));
+      // 1. Permanently register deleted stop ID in tombstone storage
+      const deletedRaw = localStorage.getItem("deleted_stops_v1");
+      const deletedArr: string[] = deletedRaw ? JSON.parse(deletedRaw) : [];
+      if (!deletedArr.includes(id)) {
+        deletedArr.push(id);
+        localStorage.setItem("deleted_stops_v1", JSON.stringify(deletedArr));
+      }
+      localStorage.setItem("has_seeded_initial_bus_v1", "true");
+
+      // 2. Update local UI state immediately for instant feedback on board and history log
+      const nextStops = stops.filter(s => s.id !== id);
+      setStops(nextStops);
+      try {
+        localStorage.setItem("bus_stops_cache_v1", JSON.stringify(nextStops));
+      } catch (e) {}
+
+      // Also clean up from wishlist if present
+      try {
+        const starRaw = localStorage.getItem("starred_stops_v1");
+        if (starRaw) {
+          const stars: string[] = JSON.parse(starRaw);
+          const nextStars = stars.filter(sId => sId !== id);
+          localStorage.setItem("starred_stops_v1", JSON.stringify(nextStars));
+          setStarredStops(nextStars);
+        }
+      } catch (e) {}
 
       if (selectedStopId === id) {
         setSelectedStopId(null);
       }
       setIsEditing(false);
 
-      // 2. Delete from Firestore database if connected and not purely local
-      if (usingFirebaseRealtime && db && !id.startsWith("local-") && !id.startsWith("off-")) {
+      // 3. Delete from Firestore database if connected and not purely local
+      if (db && !id.startsWith("local-") && !id.startsWith("off-")) {
         try {
           await deleteDoc(doc(db, "bus_updates", id));
+          console.log("✅ Successfully deleted document from Firestore:", id);
         } catch (err) {
           console.warn("Firestore document deletion notice:", err);
         }
       }
 
-      triggerToast("🗑️ Bus stop timings removed from entries.");
+      triggerToast(language === "ta" ? "🗑️ பேருந்து நிறுத்தம் வெற்றிகரமாக நீக்கப்பட்டது!" : "🗑️ Bus stop timings removed from entries.");
     } catch (e) {
       console.error("Deletion failed", e);
-      alert("❌ Deletion failed. " + (e instanceof Error ? e.message : String(e)));
+      triggerToast(language === "ta" ? "❌ நீக்குவதில் பிழை ஏற்பட்டது." : "❌ Deletion failed. " + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setIsDeletingStop(false);
+      setPendingDeleteStop(null);
     }
   };
 
-  // Wipe all entries from state
-  const handleClearAllRegistry = async () => {
-    if (!window.confirm("❗ WARNING: This will immediately delete ALL of your added bus stops from this platform. Are you sure you want to proceed?")) {
-      return;
-    }
+  // Wipe all entries from state - Safe In-App Confirmation
+  const handleClearAllRegistry = () => {
+    setShowWipeAllConfirm(true);
+  };
+
+  const executeConfirmClearAll = async () => {
+    if (!userSession) return;
+    setIsWipingAll(true);
 
     try {
-      if (!userSession) return;
-
       const myEntries = stops.filter(s => isMatchingOwner(s.addedBy, userSession, s.id));
+      const myEntryIds = myEntries.map(e => e.id);
+
+      // Register all deleted IDs into tombstone
+      const deletedRaw = localStorage.getItem("deleted_stops_v1");
+      const deletedArr: string[] = deletedRaw ? JSON.parse(deletedRaw) : [];
+      const updatedDeleted = Array.from(new Set([...deletedArr, ...myEntryIds]));
+      localStorage.setItem("deleted_stops_v1", JSON.stringify(updatedDeleted));
+      localStorage.setItem("has_seeded_initial_bus_v1", "true");
+
+      const nextStops = stops.filter(s => !isMatchingOwner(s.addedBy, userSession, s.id));
 
       // Remove from local UI state immediately
-      setStops(prevStops => prevStops.filter(s => !isMatchingOwner(s.addedBy, userSession, s.id)));
+      setStops(nextStops);
+      try {
+        localStorage.setItem("bus_stops_cache_v1", JSON.stringify(nextStops));
+      } catch (e) {}
 
       if (selectedStopId && myEntries.some(e => e.id === selectedStopId)) {
         setSelectedStopId(null);
       }
 
-      if (usingFirebaseRealtime && db) {
+      if (db) {
         for (const item of myEntries) {
           if (!item.id.startsWith("local-") && !item.id.startsWith("off-")) {
             try {
@@ -3718,9 +4185,13 @@ export default function App() {
         }
       }
 
-      triggerToast("🗑️ All matching stops successfully wiped.");
+      triggerToast(language === "ta" ? "🗑️ உங்கள் பதிவுகள் அனைத்தும் நீக்கப்பட்டன." : "🗑️ All matching stops successfully wiped.");
     } catch (err) {
       console.error("Mass formatting error", err);
+      triggerToast(language === "ta" ? "❌ நீக்குவதில் பிழை ஏற்பட்டது." : "❌ Failed to clear stops.");
+    } finally {
+      setIsWipingAll(false);
+      setShowWipeAllConfirm(false);
     }
   };
 
@@ -3918,17 +4389,21 @@ export default function App() {
     if (queryStr.length >= 3) {
       searchTimeoutRef.current = setTimeout(async () => {
         try {
-          const [nominatimPromise, geminiPromise] = [
-            fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(queryStr + ", India")}&limit=6`)
-              .then(r => r.json())
-              .catch(() => []),
-            fetch(`/api/geocode?q=${encodeURIComponent(queryStr)}`)
-              .then(r => r.ok ? r.json() : null)
-              .catch(() => null)
-          ];
+          const nominatimPromise = fetch(
+            `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(queryStr)}&countrycodes=in&viewbox=76.15,13.55,80.35,8.05&bounded=1&addressdetails=1&extratags=1&limit=8`
+          )
+            .then(r => r.json())
+            .catch(() => []);
 
-          const [nominatimData, geminiData] = await Promise.all([nominatimPromise, geminiPromise]);
-          
+          const geminiPromise = fetch(`/api/geocode?q=${encodeURIComponent(queryStr)}`)
+            .then(r => (r.ok ? r.json() : null))
+            .catch(() => null);
+
+          const [nominatimRes, geminiRes] = await Promise.allSettled([nominatimPromise, geminiPromise]);
+
+          const nominatimData = nominatimRes.status === "fulfilled" ? nominatimRes.value : [];
+          const geminiData = geminiRes.status === "fulfilled" ? geminiRes.value : null;
+
           let apiResults: any[] = [];
 
           // If Gemini geocoded successfully, put it at the very top of search results!
@@ -3966,7 +4441,7 @@ export default function App() {
         } catch (err) {
           console.warn("Geocoding service fetch failed:", err);
         }
-      }, 600); // 600ms typing debounce delay
+      }, 300); // 300ms typing debounce delay
     }
   };
 
@@ -4104,7 +4579,7 @@ export default function App() {
     return snapToRoute(interpolated);
   };
 
-  const handleAddNewStopOnRoute = () => {
+  const handleAddNewStopOnRoute = async () => {
     const nextCoord = snapToRoute(getNextStopCoordinate());
     const newIdx = pinCStops.length;
     const newStop = {
@@ -4117,6 +4592,7 @@ export default function App() {
 
     const nextStops = [...pinCStops, newStop];
     setPinCStops(nextStops);
+    pinCStopsRef.current = nextStops;
     syncStopsToRegistry(nextStops);
     setBusStopLatLng(nextCoord);
     setBusPinSet(true);
@@ -4126,9 +4602,11 @@ export default function App() {
       pickerMapInstance.panTo([nextCoord.lat, nextCoord.lng], { animate: true });
     }
 
+    await fetchOSRMRoute(pinALatLng, pinBLatLng, pickerPolylineInstance, nextStops, pickerMapInstance);
+
     triggerToast(language === "ta" 
-      ? `🚏 பேருந்து நிறுத்தம் ${newIdx + 1} உருவாக்கப்பட்டது! விபரங்களை நிரப்பவும்.` 
-      : `🚏 Bus Stop ${newIdx + 1} created on route! Fill in details.`
+      ? `🚏 பேருந்து நிறுத்தம் ${newIdx + 1} உருவாக்கப்பட்டது! இழுத்து (drag) வழியை மாற்றலாம்.` 
+      : `🚏 Bus Stop ${newIdx + 1} created! Drag pin to change route.`
     );
   };
 
@@ -4137,8 +4615,10 @@ export default function App() {
     setActivePinSelector("BUS");
 
     let firstStopCoord: { lat: number; lng: number };
+    let stopsToRoute: any[] = [];
     if (pinCStops.length > 0) {
       firstStopCoord = pinCStops[0];
+      stopsToRoute = pinCStops;
       setActiveStopPopupIdx(0);
     } else {
       const midLat = (pinALatLng.lat + pinBLatLng.lat) / 2;
@@ -4151,13 +4631,31 @@ export default function App() {
         departureTime: "08:30 AM",
         crowdLevel: "Medium" as const
       }];
+      stopsToRoute = initialStops;
       setPinCStops(initialStops);
+      pinCStopsRef.current = initialStops;
       syncStopsToRegistry(initialStops);
       setActiveStopPopupIdx(0);
     }
 
     setBusStopLatLng(firstStopCoord);
     setBusPinSet(true);
+
+    if (pickerPolylineInstance) {
+      try {
+        const existing = pickerPolylineInstance.getLatLngs();
+        if (Array.isArray(existing) && existing.length > 0) {
+          if (Array.isArray(existing[0])) {
+            lastValidRouteLatLngsRef.current = existing as any;
+          } else if (typeof (existing[0] as any).lat === 'number') {
+            lastValidRouteLatLngsRef.current = existing.map((p: any) => [p.lat, p.lng]);
+          }
+        }
+      } catch (e) {}
+    }
+    lastValidStopsRef.current = stopsToRoute;
+
+    fetchOSRMRoute(pinALatLng, pinBLatLng, pickerPolylineInstance, stopsToRoute, pickerMapInstance);
 
     if (pickerMapInstance) {
       pickerMapInstance.setView([firstStopCoord.lat, firstStopCoord.lng], 15, { animate: true });
@@ -4171,13 +4669,35 @@ export default function App() {
     }
 
     triggerToast(language === "ta" 
-      ? "👉 தொடக்கம் & முடிவு சேமிக்கப்பட்டது! பேருந்து நிறுத்தம் 1 விபரங்களை உள்ளிடுக." 
-      : "👉 Start & End Saved! Edit Bus Stop 1 details."
+      ? "👉 தொடக்கம் & முடிவு சேமிக்கப்பட்டது! பேருந்து நிறுத்தத்தை இழுத்து (drag) வழியை மாற்றலாம்." 
+      : "👉 Start & End Saved! Drag the Bus Stop pin to change the route."
     );
   };
 
   const handleSaveMapCoordinates = () => {
+    if (routeError) {
+      triggerToast(language === "ta"
+        ? "⚠️ வழித்தடம் கிடைக்கவில்லை (No Route Available)! பேருந்து நிறுத்தத்தை சரியான பாதையில் வைக்கவும்."
+        : "⚠️ No Route Available! Please drag the bus stop onto a connecting road before saving.");
+      return;
+    }
+
     if (pinCStops.length > 0) {
+      // Validate that every bus stop on the route has Bus Name / Number filled
+      const missingIndex = pinCStops.findIndex(p => !p.busName || !p.busName.trim());
+      if (missingIndex !== -1) {
+        setActiveStopPopupIdx(missingIndex);
+        triggerToast(language === "ta"
+          ? `⚠️ பேருந்து நிறுத்தம் ${missingIndex + 1}-க்கான பேருந்து எண்/பெயரை (Bus Name/No) கட்டாயம் உள்ளிடவும்!`
+          : `⚠️ Please enter Bus Name / Number for Bus Stop ${missingIndex + 1}!`);
+        if (pinCMarkersRef.current && pinCMarkersRef.current[missingIndex]) {
+          try {
+            pinCMarkersRef.current[missingIndex].openPopup();
+          } catch (e) {}
+        }
+        return;
+      }
+
       const coordStr = pinCStops.map((p, i) => {
         let label = `Bus Stop ${i+1}: ${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}`;
         if (p.busName) label += ` (${p.busName})`;
@@ -4513,7 +5033,7 @@ export default function App() {
   const uniqueDistricts: string[] = ["All", ...Array.from(new Set(stops.map(s => s.name).filter(Boolean))) as any];
 
   return (
-    <div className={`min-h-screen flex flex-col md:flex-row transition-colors duration-300 ${
+    <div className={`min-h-screen w-full max-w-full overflow-x-hidden flex flex-col md:flex-row transition-colors duration-300 ${
       theme === "dark" 
         ? "bg-[#090b0f] text-[#f0ede8]" 
         : "bg-[#f4f6fa] text-[#090b0f]"
@@ -4965,19 +5485,13 @@ export default function App() {
       </aside>
 
       {/* ── MAIN WORKSPACE CONTENT AREA ── */}
-      <main className="flex-1 min-h-screen flex flex-col px-4 py-6 md:px-12 md:py-10 max-w-5xl mx-auto w-full pb-24 md:pb-12">
-        {usingFirebaseRealtime && (
-          <div className="text-[11px] text-emerald-500 font-semibold mb-3 flex items-center gap-1.5 justify-end w-full">
-            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping"></span>
-            <span>REAL-TIME FIREBASE DATABASE CONNECTED</span>
-          </div>
-        )}
+      <main className="flex-1 min-h-screen flex flex-col px-4 py-6 md:px-12 md:py-10 max-w-5xl mx-auto w-full max-w-full overflow-x-hidden pb-24 md:pb-12">
 
         {/* ── ROUTING INTERACTIVE PAGES ── */}
 
         {/* VIEW 1: DETAIL DISCOVERY CARDS */}
         {selectedStopId && (
-          <div className="animate-fade-in">
+          <div className="animate-fade-in w-full max-w-full overflow-x-hidden">
             {/* Back header navigation */}
             <button 
               onClick={() => setSelectedStopId(null)}
@@ -5002,20 +5516,20 @@ export default function App() {
               }
 
               return (
-                <div className={`p-6 rounded-2xl border ${
+                <div className={`p-4 sm:p-6 rounded-2xl border ${
                   theme === "dark" ? "bg-[#131622] border-[#202438]" : "bg-white border-[#e4e8f1]"
-                } shadow-xl max-w-3xl mx-auto`}>
+                } shadow-xl max-w-3xl mx-auto w-full max-w-full overflow-hidden`}>
                   
                   {/* Title block */}
-                  <div className="flex items-start justify-between gap-4 mb-6">
-                    <div>
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
+                    <div className="min-w-0 flex-1">
                       <span className="text-brand-yellow text-[11px] tracking-widest font-extrabold uppercase block mb-1">{t("user_stop_badge")}</span>
-                      <h2 className="font-display font-extrabold text-2xl md:text-3xl tracking-tight leading-tight">
+                      <h2 className="font-display font-extrabold text-xl sm:text-2xl md:text-3xl tracking-tight leading-tight break-words max-w-full overflow-hidden">
                         🚌 {item.name}, <span className="text-brand-yellow">{item.village}</span>
                       </h2>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap sm:shrink-0 pt-1 sm:pt-0">
                       {/* Like Button */}
                       <button
                         type="button"
@@ -5107,7 +5621,7 @@ export default function App() {
                       <h4 className="font-extrabold text-md">{item.location}</h4>
                     </div>
 
-                    {item.startRoute && item.endRoute && (
+                    {item.startRoute && item.endRoute ? (
                       <div className={`p-4 rounded-xl border md:col-span-2 ${
                         theme === "dark" ? "bg-[#1a1d27]/40 border-[#2e3150]/60" : "bg-[#f8f9fa] border-[#ced0d4]/60"
                       }`}>
@@ -5118,7 +5632,16 @@ export default function App() {
                           <span>{item.endRoute}</span>
                         </h4>
                       </div>
-                    )}
+                    ) : item.cityRoute ? (
+                      <div className={`p-4 rounded-xl border md:col-span-2 ${
+                        theme === "dark" ? "bg-[#1a1d27]/40 border-[#2e3150]/60" : "bg-[#f8f9fa] border-[#ced0d4]/60"
+                      }`}>
+                        <p className="text-xs text-[#7a7f96] font-bold uppercase tracking-wider mb-0.5">{t("route_lbl")}</p>
+                        <h4 className="font-extrabold text-brand-yellow text-md flex items-center gap-2">
+                          <span>📍 {item.cityRoute} ({language === "ta" ? "நகர சேவை" : "City Service"})</span>
+                        </h4>
+                      </div>
+                    ) : null}
 
                     {(item.activeDays || item.excludedDays) && (
                       <div className={`p-4 rounded-xl border md:col-span-2 ${
@@ -5126,7 +5649,7 @@ export default function App() {
                       }`}>
                         <p className="text-xs text-[#7a7f96] font-bold uppercase tracking-wider mb-1 flex items-center gap-1">
                           <Calendar className="w-3.5 h-3.5 text-brand-yellow" />
-                          <span>{language === "ta" ? "இயங்கும் நாட்கள் (Days of Operation)" : "Days of Operation"}</span>
+                          <span>{language === "ta" ? "இயங்கும் நாட்கள்" : "Days of Operation"}</span>
                         </p>
                         <div className="flex flex-col sm:flex-row gap-4 sm:items-center justify-between mt-1">
                           <div>
@@ -5455,7 +5978,7 @@ export default function App() {
                       <div 
                         key={stop.id}
                         onClick={() => setSelectedStopId(stop.id)}
-                        className={`p-5 rounded-2xl border transition-all cursor-pointer group hover:scale-[1.01] hover:border-brand-yellow relative overflow-hidden flex flex-col justify-between ${
+                        className={`p-4 sm:p-5 rounded-2xl border transition-all cursor-pointer group hover:scale-[1.01] hover:border-brand-yellow relative overflow-hidden flex flex-col justify-between ${
                           theme === "dark" 
                             ? "bg-[#131622] border-[#1f233a] shadow-lg shadow-black/10" 
                             : "bg-white border-[#ced0d4]/80 shadow-md shadow-neutral-200/50"
@@ -5469,14 +5992,25 @@ export default function App() {
                         <div>
                           {/* Title district limits */}
                           <div className="flex items-start justify-between gap-2 mb-3">
-                            <div>
-                              <span className="text-[10px] text-[#7a7f96] uppercase tracking-wider font-extrabold block">{t("tn_registry_board_badge")}</span>
-                              <h3 className="font-display font-extrabold text-lg group-hover:text-brand-yellow transition-colors leading-tight truncate max-w-[200px]">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                <span className="text-[10px] text-[#7a7f96] uppercase tracking-wider font-extrabold block">{t("tn_registry_board_badge")}</span>
+                                <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full ${
+                                  stop.route.includes("High") 
+                                    ? "bg-red-500/10 text-red-500 border border-red-500/20" 
+                                    : stop.route.includes("Medium") 
+                                    ? "bg-amber-500/10 text-amber-500 border border-amber-500/20" 
+                                    : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                                }`}>
+                                  {stop.route.includes("High") ? t("high_crowd") : stop.route.includes("Medium") ? t("medium_crowd") : t("low_crowd")}
+                                </span>
+                              </div>
+                              <h3 className="font-display font-extrabold text-base sm:text-lg group-hover:text-brand-yellow transition-colors leading-tight truncate">
                                 {stop.name} · <span className="text-brand-yellow font-bold text-sm">{stop.village}</span>
                               </h3>
                             </div>
 
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-1 shrink-0">
                               {/* Like Button */}
                               <button
                                 type="button"
@@ -5531,7 +6065,7 @@ export default function App() {
                               <button
                                 type="button"
                                 onClick={(e) => toggleStar(stop.id, e)}
-                                className="p-1.5 rounded-full hover:bg-neutral-500/10 transition-colors cursor-pointer z-10"
+                                className="p-1.5 rounded-full hover:bg-neutral-500/10 transition-colors cursor-pointer z-10 shrink-0"
                                 title={starredStops.includes(stop.id) ? "Remove from Wishlist" : "Add to Wishlist"}
                               >
                                 <Star 
@@ -5542,16 +6076,6 @@ export default function App() {
                                   }`} 
                                 />
                               </button>
-
-                              <span className={`text-[10px] font-extrabold px-3 py-1 rounded-full ${
-                                stop.route.includes("High") 
-                                  ? "bg-red-500/10 text-red-500 border border-red-500/20" 
-                                  : stop.route.includes("Medium") 
-                                  ? "bg-amber-500/10 text-amber-500 border border-amber-500/20" 
-                                  : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
-                              }`}>
-                                {stop.route.includes("High") ? t("high_crowd") : stop.route.includes("Medium") ? t("medium_crowd") : t("low_crowd")}
-                              </span>
                             </div>
                           </div>
 
@@ -5565,7 +6089,7 @@ export default function App() {
                               <span className="text-[#7a7f96] font-bold">{t("village_limit_lbl")}</span>
                               <span>{stop.village}</span>
                             </div>
-                            {stop.startRoute && stop.endRoute && (
+                            {stop.startRoute && stop.endRoute ? (
                               <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
                                 <span className="text-[#7a7f96] font-bold text-[10px] uppercase tracking-wider shrink-0">{t("route_lbl")}:</span>
                                 <span className={`font-extrabold text-xs px-2 py-0.5 rounded-lg flex items-center gap-1.5 ${
@@ -5576,7 +6100,16 @@ export default function App() {
                                   <span>{stop.endRoute}</span>
                                 </span>
                               </div>
-                            )}
+                            ) : stop.cityRoute ? (
+                              <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                                <span className="text-[#7a7f96] font-bold text-[10px] uppercase tracking-wider shrink-0">{t("route_lbl")}:</span>
+                                <span className={`font-extrabold text-xs px-2 py-0.5 rounded-lg flex items-center gap-1.5 ${
+                                  theme === "dark" ? "bg-amber-400/10 text-[#f8be43]" : "bg-[#f8be43]/15 text-[#a1761e]"
+                                }`}>
+                                  <span>📍 {stop.cityRoute} ({language === "ta" ? "நகர சேவை" : "City Service"})</span>
+                                </span>
+                              </div>
+                            ) : null}
                             {(stop.activeDays || stop.excludedDays) && (
                               <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
                                 <span className="text-[#7a7f96] font-bold text-[10px] uppercase tracking-wider shrink-0">
@@ -5691,7 +6224,7 @@ export default function App() {
                         <div 
                           key={stop.id}
                           onClick={() => setSelectedStopId(stop.id)}
-                          className={`p-5 rounded-2xl border transition-all cursor-pointer group hover:scale-[1.01] hover:border-brand-yellow relative overflow-hidden flex flex-col justify-between ${
+                          className={`p-4 sm:p-5 rounded-2xl border transition-all cursor-pointer group hover:scale-[1.01] hover:border-brand-yellow relative overflow-hidden flex flex-col justify-between ${
                             theme === "dark" 
                               ? "bg-[#131622] border-[#1f233a] shadow-lg shadow-black/10" 
                               : "bg-white border-[#ced0d4]/80 shadow-md shadow-neutral-200/50"
@@ -5705,14 +6238,25 @@ export default function App() {
                           <div>
                             {/* Title district limits */}
                             <div className="flex items-start justify-between gap-2 mb-3">
-                              <div>
-                                <span className="text-[10px] text-[#7a7f96] uppercase tracking-wider font-extrabold block">{t("tn_registry_board_badge")}</span>
-                                <h3 className="font-display font-extrabold text-lg group-hover:text-brand-yellow transition-colors leading-tight truncate max-w-[200px]">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                  <span className="text-[10px] text-[#7a7f96] uppercase tracking-wider font-extrabold block">{t("tn_registry_board_badge")}</span>
+                                  <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full ${
+                                    stop.route.includes("High") 
+                                      ? "bg-red-500/10 text-red-500 border border-red-500/20" 
+                                      : stop.route.includes("Medium") 
+                                      ? "bg-amber-500/10 text-amber-500 border border-amber-500/20" 
+                                      : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                                  }`}>
+                                    {stop.route.includes("High") ? t("high_crowd") : stop.route.includes("Medium") ? t("medium_crowd") : t("low_crowd")}
+                                  </span>
+                                </div>
+                                <h3 className="font-display font-extrabold text-base sm:text-lg group-hover:text-brand-yellow transition-colors leading-tight truncate">
                                   {stop.name} · <span className="text-brand-yellow font-bold text-sm">{stop.village}</span>
                                 </h3>
                               </div>
 
-                              <div className="flex items-center gap-1">
+                              <div className="flex items-center gap-1 shrink-0">
                                 {/* Like Button */}
                                 <button
                                   type="button"
@@ -5767,21 +6311,11 @@ export default function App() {
                                 <button
                                   type="button"
                                   onClick={(e) => toggleStar(stop.id, e)}
-                                  className="p-1.5 rounded-full hover:bg-neutral-500/10 transition-colors cursor-pointer z-10"
+                                  className="p-1.5 rounded-full hover:bg-neutral-500/10 transition-colors cursor-pointer z-10 shrink-0"
                                   title="Remove from Wishlist"
                                 >
                                   <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
                                 </button>
-
-                                <span className={`text-[10px] font-extrabold px-3 py-1 rounded-full ${
-                                  stop.route.includes("High") 
-                                    ? "bg-red-500/10 text-red-500 border border-red-500/20" 
-                                    : stop.route.includes("Medium") 
-                                    ? "bg-amber-500/10 text-amber-500 border border-amber-500/20" 
-                                    : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
-                                }`}>
-                                  {stop.route.includes("High") ? t("high_crowd") : stop.route.includes("Medium") ? t("medium_crowd") : t("low_crowd")}
-                                </span>
                               </div>
                             </div>
 
@@ -5867,7 +6401,7 @@ export default function App() {
 
                   {/* Standard Support Contact */}
                   <div className="mt-8 pt-4 border-t border-dashed border-neutral-700/20 text-center text-xs text-[#7a7f96] font-medium">
-                    <span>Need immediate technical query resolutions? Contact admin support: </span>
+                    <span>Admin Support: </span>
                     <a href="mailto:p99705270@gmail.com" className="text-brand-yellow font-bold hover:underline">
                       p99705270@gmail.com
                     </a>
@@ -5915,9 +6449,6 @@ export default function App() {
                       <h2 className="font-display font-extrabold text-lg md:text-xl flex items-center gap-2">
                         {editModeId ? t("edit_bus_stop_title") : t("register_bus_stop_title")}
                       </h2>
-                      <p className="text-xs text-[#7a7f96] mt-1 leading-relaxed">
-                        {t("add_stop_desc")}
-                      </p>
                     </div>
 
                     <form onSubmit={handleAddStopSubmit} className="space-y-4">
@@ -6055,6 +6586,40 @@ export default function App() {
                         )}
                       </div>
                     </div>
+
+                    {/* OR Divider and Bus Stop City Route */}
+                    <div className="space-y-3 pt-2 pb-1">
+                      <div className="relative flex items-center justify-center my-1.5">
+                        <div className="border-t border-neutral-700/60 w-full absolute"></div>
+                        <span className={`relative px-3 py-0.5 text-[10px] font-extrabold uppercase tracking-widest rounded-full border shadow-sm ${
+                          theme === "dark" 
+                            ? "bg-[#0b0d16] text-[#7a7f96] border-neutral-800" 
+                            : "bg-white text-neutral-500 border-neutral-200"
+                        }`}>
+                          {t("route_or_divider")}
+                        </span>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-[#7a7f96] uppercase tracking-wider block">
+                          {t("bus_stop_city_lbl")}
+                        </label>
+                        <div className="relative">
+                          <MapPin className="w-3.5 h-3.5 text-brand-yellow/70 absolute left-3 top-3" />
+                          <input
+                            type="text"
+                            placeholder={t("bus_stop_city_placeholder")}
+                            className={`w-full p-2.5 pl-9 text-xs rounded-xl border outline-none font-semibold focus:border-brand-yellow focus:ring-1 focus:ring-brand-yellow/40 ${
+                              theme === "dark"
+                                ? "bg-[#141622] border-neutral-800 text-white placeholder-white/25"
+                                : "bg-neutral-50 border-neutral-200 text-[#090b0f] placeholder-neutral-450"
+                            }`}
+                            value={formData.cityRoute || ""}
+                            onChange={(e) => setFormData(prev => ({ ...prev, cityRoute: e.target.value }))}
+                          />
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
 
@@ -6066,7 +6631,7 @@ export default function App() {
                     <div className="flex items-center gap-1.5 border-b border-neutral-800/5 pb-1.5">
                       <Calendar className="w-3.5 h-3.5 text-brand-yellow" />
                       <span className="text-[11px] font-bold text-[#7a7f96] uppercase tracking-wider block">
-                        {language === "ta" ? "பேருந்து இயங்கும் நாட்கள் விவரம்" : "Days of Operation Details"}
+                        {language === "ta" ? "பேருந்து இயங்கும் நாட்கள்" : "Days of Operation"}
                       </span>
                     </div>
 
@@ -6138,9 +6703,9 @@ export default function App() {
                             <button
                               key={option}
                               type="button"
-                              onClick={() => setFormData(prev => ({ ...prev, excludedDays: option === "None" || option === "இல்லை" ? "" : option }))}
+                              onClick={() => setFormData(prev => ({ ...prev, excludedDays: option }))}
                               className={`px-2 py-1 text-[9px] font-extrabold rounded-lg border transition-all cursor-pointer ${
-                                (option === "None" || option === "இல்லை" ? !formData.excludedDays : formData.excludedDays === option)
+                                formData.excludedDays === option
                                   ? "bg-brand-yellow/20 border-brand-yellow text-brand-yellow"
                                   : theme === "dark"
                                     ? "bg-[#141622] border-neutral-850 text-neutral-400 hover:text-white"
@@ -6215,6 +6780,7 @@ export default function App() {
                             location: "",
                             startRoute: "",
                             endRoute: "",
+                            cityRoute: "",
                             route: "Medium Crowd",
                             timings: "",
                             gps: "",
@@ -6245,7 +6811,7 @@ export default function App() {
 
                 {/* Standard Support Contact */}
                 <div className="mt-6 pt-4 border-t border-dashed border-neutral-700/20 text-center text-xs text-[#7a7f96] font-medium">
-                  <span>Need immediate technical query resolutions? Contact admin support: </span>
+                  <span>Admin Support: </span>
                   <a href="mailto:p99705270@gmail.com" className="text-brand-yellow font-bold hover:underline">
                     p99705270@gmail.com
                   </a>
@@ -6340,6 +6906,15 @@ export default function App() {
                                 <p className="text-xs text-[#7a7f96] mt-1 font-medium">
                                   {t("bus_name_lbl")} <b>{stop.location}</b> | {t("crowd_level_lbl")}: <b>{stop.route}</b>
                                 </p>
+                                {stop.startRoute && stop.endRoute ? (
+                                  <p className="text-[11px] text-brand-yellow font-bold mt-1">
+                                    🛣️ {stop.startRoute} ➔ {stop.endRoute}
+                                  </p>
+                                ) : stop.cityRoute ? (
+                                  <p className="text-[11px] text-brand-yellow font-bold mt-1">
+                                    📍 {stop.cityRoute} ({language === "ta" ? "நகர சேவை" : "City Service"})
+                                  </p>
+                                ) : null}
                                 <div className="flex flex-wrap gap-1 mt-2">
                                   {(stop.timings || []).map((timeItem, idx) => (
                                     <span key={idx} className="text-[10px] bg-zinc-800/10 text-[#7a7f96] px-2 py-0.5 rounded border border-neutral-700/20 font-bold">{timeItem}</span>
@@ -7104,7 +7679,49 @@ export default function App() {
               </div>
             )}
 
-
+            {/* Dynamic Road Route Status, Recalculation Spinner & "No Route Available" Warning Overlay */}
+            <div className="absolute top-[76px] left-4 right-4 md:left-[15%] md:right-[15%] lg:left-[25%] lg:right-[25%] z-[1000] pointer-events-none flex justify-center">
+              {isRouteLoading ? (
+                <div className="bg-zinc-950/90 text-white px-4 py-2 rounded-2xl shadow-2xl border border-blue-500/40 flex items-center gap-2.5 backdrop-blur-md pointer-events-auto animate-pulse">
+                  <RefreshCw className="w-4 h-4 text-blue-400 animate-spin shrink-0" />
+                  <span className="text-[11px] font-black tracking-wide text-blue-300">
+                    {language === "ta" ? "நீலக் கோட்டு வழித்தடம் கணக்கிடப்படுகிறது..." : "Recalculating road route..."}
+                  </span>
+                </div>
+              ) : routeError ? (
+                <div className="bg-red-600/95 text-white px-4 py-2.5 rounded-2xl shadow-2xl border-2 border-white/40 flex items-center gap-3 backdrop-blur-md pointer-events-auto animate-bounce">
+                  <AlertTriangle className="w-5 h-5 text-yellow-300 shrink-0" />
+                  <div className="flex flex-col text-left">
+                    <span className="font-black text-xs uppercase tracking-wide flex items-center gap-2">
+                      <span>No Route Available</span>
+                      <span className="text-[9px] bg-black/40 px-2 py-0.5 rounded-full font-bold">வழித்தடம் இல்லை</span>
+                    </span>
+                    <span className="text-[10px] text-red-100 font-bold leading-tight">
+                      {language === "ta"
+                        ? "தொடக்க மற்றும் முடிவு புள்ளிகளுடன் இந்த நிறுத்தத்தை இணைக்க வழி இல்லை. பேருந்து நிறுத்தப் பின்னை சரியான பாதையில் இழுத்து விடவும்."
+                        : "Cannot connect Start to End via this bus stop location. Drag the pin to a connecting road."}
+                    </span>
+                  </div>
+                </div>
+              ) : (routeDistance !== null && (mapStep === 2 || (pinASet && pinBSet))) ? (
+                <div className="bg-zinc-950/90 text-white px-4 py-1.5 rounded-2xl shadow-2xl border border-blue-500/30 flex items-center gap-3 backdrop-blur-md pointer-events-auto">
+                  <span className="flex h-2 w-2 rounded-full bg-blue-500 animate-pulse"></span>
+                  <span className="text-[11px] font-black text-blue-400">
+                    🛣️ {routeDistance.toFixed(1)} km
+                  </span>
+                  {routeDuration !== null && (
+                    <span className="text-[11px] font-extrabold text-neutral-300">
+                      ⏱️ ~{Math.round(routeDuration)} mins
+                    </span>
+                  )}
+                  {mapStep === 2 && pinCStops.length > 0 && (
+                    <span className="text-[9.5px] bg-red-600/30 text-red-300 font-bold px-2 py-0.5 rounded-full">
+                      🚏 {pinCStops.length} {pinCStops.length === 1 ? "Stop Linked" : "Stops Linked"}
+                    </span>
+                  )}
+                </div>
+              ) : null}
+            </div>
 
             {/* On-Demand Geolocation Refresh Button */}
             <div className="absolute bottom-[136px] md:bottom-[152px] right-4 z-[1001] pointer-events-auto">
@@ -7142,7 +7759,7 @@ export default function App() {
                   <span>SAVE</span>
                 </button>
               )}
-              {mapStep === 2 && isBetweenPoints(busStopLatLng, pinALatLng, pinBLatLng) && (
+              {mapStep === 2 && pinCStops.length > 0 && !routeError && !isRouteLoading && (
                 <button
                   type="button"
                   onClick={handleSaveMapCoordinates}
@@ -7151,6 +7768,12 @@ export default function App() {
                   <span>✅</span>
                   <span>SAVE</span>
                 </button>
+              )}
+              {mapStep === 2 && routeError && (
+                <div className="px-3.5 py-2.5 bg-red-600 text-white rounded-2xl shadow-2xl font-black text-xs flex items-center gap-1.5 border border-red-500 animate-pulse">
+                  <AlertTriangle className="w-4 h-4 text-yellow-300 shrink-0" />
+                  <span>No Route Available</span>
+                </div>
               )}
               <button
                 type="button"
@@ -7219,8 +7842,23 @@ export default function App() {
             )}
 
             {/* Step 2 Instruction Details Container & Add Stop Action - Bottom-Left of Map */}
+            {/* Step 2 Instruction Details Container & Add Stop Action - Bottom-Left of Map */}
             {canEditStops && mapStep === 2 && (
-              <div className="absolute bottom-4 left-4 z-[1000] flex items-center gap-2.5 pointer-events-auto">
+              <div className="absolute bottom-4 left-4 z-[1000] flex flex-col items-start gap-2 pointer-events-auto">
+                {/* 🚏 ADD STOP BUTTON - Positioned directly above the INFO button as requested */}
+                <button
+                  type="button"
+                  onClick={handleAddNewStopOnRoute}
+                  className="px-3.5 py-2.5 md:px-4 md:py-3 bg-red-600 hover:bg-red-700 active:scale-95 text-white rounded-2xl shadow-2xl font-black text-xs flex items-center gap-2 border border-red-500 hover:scale-105 transition-all cursor-pointer whitespace-nowrap animate-pulse shrink-0"
+                  title={language === "ta" ? "நீலக் கோட்டில் புதிய பேருந்து நிறுத்தத்தை சேர்க்கவும்" : "Add new bus stop along the blue route line"}
+                >
+                  <PlusCircle className="w-4 h-4 text-white shrink-0" />
+                  <span className="tracking-wider uppercase font-black">ADD STOP</span>
+                  <span className="bg-red-900/80 text-white text-[10px] px-2 py-0.5 rounded-full font-mono font-bold">
+                    #{pinCStops.length + 1}
+                  </span>
+                </button>
+
                 {!isStopPanelExpanded ? (
                   <button
                     type="button"
@@ -7232,7 +7870,7 @@ export default function App() {
                     <span className="text-[8px] uppercase tracking-wider font-extrabold text-neutral-400">INFO</span>
                   </button>
                 ) : (
-                  <div className="absolute bottom-16 left-0 bg-zinc-950/95 border border-zinc-800 rounded-3xl p-5 shadow-2xl text-left w-[300px] md:w-[380px] space-y-4 animate-[slide-up_0.2s_ease-out] backdrop-blur-md max-h-[300px] overflow-y-auto md:max-h-[380px] z-[1010]">
+                  <div className="bg-zinc-950/95 border border-zinc-800 rounded-3xl p-5 shadow-2xl text-left w-[300px] md:w-[380px] space-y-4 animate-[slide-up_0.2s_ease-out] backdrop-blur-md max-h-[300px] overflow-y-auto md:max-h-[380px] z-[1010]">
                     <div className="flex items-center justify-between border-b border-zinc-800/40 pb-2.5">
                       <div className="flex items-center gap-2">
                         <span className="animate-pulse flex h-2.5 w-2.5 rounded-full bg-red-500"></span>
@@ -7252,18 +7890,22 @@ export default function App() {
 
                     <div className="space-y-1.5 border-b border-zinc-800/40 pb-2.5">
                       <h4 className="font-display font-black text-xs text-neutral-200">
-                        Where on this route is the exact bus stop located? Place the Bus Stop pin!
+                        {language === "ta" 
+                          ? "பேருந்து நிறுத்தப் பின்னை இழுத்து (drag) நீலக் கோட்டு வழியை மாற்றலாம்!" 
+                          : "Drag Bus Stop pins to dynamically change the blue route line!"}
                       </h4>
                       <p className="text-[10px] text-neutral-400 font-bold leading-relaxed">
-                        (The bus stops must be positioned within the active route corridor segment range)
+                        {language === "ta"
+                          ? "மாற்று வழியில் பேருந்து நிறுத்தத்தை வைத்தால் நீலக் கோடு தானாக மாறும். வழித்தடம் இணைக்க முடியாவிட்டால் 'No Route Available' காண்பிக்கப்படும்."
+                          : "Drop the bus stop on any road to re-route between Start and End. If disconnected, 'No Route Available' will be shown."}
                       </p>
                     </div>
 
                     <div className="space-y-3">
                       <div className={`p-3.5 rounded-2xl border flex flex-col gap-3 shadow-xl ${
-                        (pinCStops.length > 0 && pinCStops.every(p => isBetweenPoints(p, pinALatLng, pinBLatLng))) 
+                        (pinCStops.length > 0 && !routeError) 
                           ? 'border-emerald-500/20 bg-emerald-600/10 text-emerald-400' 
-                          : 'border-orange-500/30 bg-orange-600/10 text-orange-400'
+                          : 'border-red-500/30 bg-red-600/10 text-red-400'
                       }`}>
                         <div className="space-y-1">
                           <span className="font-extrabold text-[9px] tracking-wider uppercase block">
@@ -7274,13 +7916,12 @@ export default function App() {
                               <p className="italic text-neutral-400 text-[10px]">No bus stops placed yet. Click on the map route line to place one.</p>
                             ) : (
                               pinCStops.map((p, idx) => {
-                                const inRange = isBetweenPoints(p, pinALatLng, pinBLatLng);
                                 return (
                                   <div key={idx} className="flex justify-between items-center text-neutral-300 font-mono py-1 border-b border-white/[0.04] last:border-b-0">
                                     <span>Stop {idx + 1}: {p.lat.toFixed(5)}, {p.lng.toFixed(5)}</span>
                                     <div className="flex items-center gap-1.5">
-                                      <span className={inRange ? "text-emerald-400 font-bold" : "text-orange-400 font-bold"}>
-                                        {inRange ? "✓" : "⚠"}
+                                      <span className={!routeError ? "text-emerald-400 font-bold" : "text-red-400 font-bold"}>
+                                        {!routeError ? "✓" : "⚠"}
                                       </span>
                                       <button
                                         type="button"
@@ -7289,6 +7930,7 @@ export default function App() {
                                           ev.stopPropagation();
                                           const updated = pinCStops.filter((_, i) => i !== idx);
                                           setPinCStops(updated);
+                                          pinCStopsRef.current = updated;
                                           syncStopsToRegistry(updated);
                                           if (updated.length > 0) {
                                             setBusStopLatLng(updated[0]);
@@ -7297,6 +7939,7 @@ export default function App() {
                                             setBusPinSet(false);
                                             setActiveStopPopupIdx(null);
                                           }
+                                          fetchOSRMRoute(pinALatLng, pinBLatLng, pickerPolylineInstance, updated, pickerMapInstance);
                                           triggerToast(`✕ Removed Bus Stop ${idx + 1}`);
                                         }}
                                       >
@@ -7309,14 +7952,14 @@ export default function App() {
                             )}
                           </div>
                           <div className="text-[9px] opacity-90 mt-1.5 font-semibold font-sans">
-                            {(pinCStops.length > 0 && pinCStops.every(p => isBetweenPoints(p, pinALatLng, pinBLatLng))) 
-                              ? "🎯 Bus Stop positioned inside selection range!" 
-                              : "⚠️ Bus Stop is currently outside the segment bounds."
+                            {pinCStops.length > 0 && !routeError 
+                              ? "🎯 Road route connected through all bus stops!" 
+                              : "⚠️ No Route Available through current bus stop placement."
                             }
                           </div>
                         </div>
 
-                        {!(pinCStops.length > 0 && pinCStops.every(p => isBetweenPoints(p, pinALatLng, pinBLatLng))) && (
+                        {routeError && (
                           <button
                             type="button"
                             onClick={() => {
@@ -7325,38 +7968,27 @@ export default function App() {
                               const firstStop = { lat: midLat, lng: midLng };
                               const snappedFirst = snapToRoute(firstStop);
                               setPinCStops([snappedFirst]);
+                              pinCStopsRef.current = [snappedFirst];
                               setBusStopLatLng(snappedFirst);
                               setBusPinSet(true);
                               setActiveStopPopupIdx(0);
                               syncStopsToRegistry([snappedFirst]);
+                              fetchOSRMRoute(pinALatLng, pinBLatLng, pickerPolylineInstance, [snappedFirst], pickerMapInstance);
                               if (pickerMapInstance) {
                                 pickerMapInstance.setView([snappedFirst.lat, snappedFirst.lng], 14);
                               }
                               triggerToast("🪄 Re-centered Bus Stop at segment midpoint!");
                             }}
-                            className="py-2 px-3 bg-[#e2f155] text-black font-extrabold text-[9.5px] uppercase rounded-xl shadow-lg hover:scale-105 active:scale-95 transition-all text-center self-start cursor-pointer"
+                            className="py-2 px-3 bg-[#e2f155] text-black font-extrabold text-[9.5px] uppercase rounded-xl shadow-lg hover:scale-105 active:scale-95 transition-all text-center self-start cursor-pointer flex items-center gap-1.5"
                           >
-                            🪄 Reset to Midpoint
+                            <span>🪄</span>
+                            <span>Reset to Connected Route</span>
                           </button>
                         )}
                       </div>
                     </div>
                   </div>
                 )}
-
-                {/* 🚏 ADD STOP BUTTON (Highlighted in red box in user photo) */}
-                <button
-                  type="button"
-                  onClick={handleAddNewStopOnRoute}
-                  className="px-4 py-3 bg-red-600 hover:bg-red-700 active:scale-95 text-white rounded-2xl shadow-2xl font-black text-xs flex items-center gap-2 border border-red-500 hover:scale-105 transition-all cursor-pointer whitespace-nowrap animate-pulse shrink-0"
-                  title={language === "ta" ? "நீலக் கோட்டில் புதிய பேருந்து நிறுத்தத்தை சேர்க்கவும்" : "Add new bus stop along the blue route line"}
-                >
-                  <PlusCircle className="w-4 h-4 text-white shrink-0" />
-                  <span className="tracking-wider uppercase font-black">ADD STOP</span>
-                  <span className="bg-red-900/80 text-white text-[10px] px-2 py-0.5 rounded-full font-mono font-bold">
-                    #{pinCStops.length + 1}
-                  </span>
-                </button>
               </div>
             )}
           </div>
@@ -7422,7 +8054,7 @@ export default function App() {
                 </div>
               </div>
             ) : (() => {
-              const isBusPinInRange = pinCStops.length > 0 && pinCStops.every(p => isBetweenPoints(p, pinALatLng, pinBLatLng));
+              const canSaveStops = pinCStops.length > 0 && !routeError && !isRouteLoading;
               return (
                 /* --- STEP 2: ACTION BUTTONS ALWAYS VISIBLE UNDER THE MAP --- */
                 <div className="flex flex-row items-center justify-between h-full w-full select-none gap-3">
@@ -7435,7 +8067,7 @@ export default function App() {
                   </button>
 
                   <div className="flex gap-2.5 items-center shrink-0">
-                    {isBusPinInRange ? (
+                    {canSaveStops ? (
                       <button 
                         type="button"
                         onClick={handleSaveMapCoordinates}
@@ -7443,9 +8075,19 @@ export default function App() {
                       >
                         <span>✅ SAVE</span>
                       </button>
+                    ) : routeError ? (
+                      <div className="px-3.5 py-2.5 rounded-xl bg-red-600/20 border border-red-500/40 text-red-400 text-[10px] font-extrabold text-center flex items-center gap-1.5 animate-pulse">
+                        <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                        <span>No Route Available</span>
+                      </div>
+                    ) : isRouteLoading ? (
+                      <div className="px-3.5 py-2.5 rounded-xl bg-blue-600/20 border border-blue-500/40 text-blue-400 text-[10px] font-extrabold text-center flex items-center gap-1.5">
+                        <RefreshCw className="w-3.5 h-3.5 text-blue-400 animate-spin shrink-0" />
+                        <span>Calculating route...</span>
+                      </div>
                     ) : (
                       <div className="px-3 py-2.5 rounded-xl bg-orange-600/10 border border-orange-500/30 text-orange-400 text-[10px] font-extrabold text-center animate-pulse">
-                        ⚠️ Place inside range to save
+                        ⚠️ Place stop on route to save
                       </div>
                     )}
                   </div>
@@ -7783,6 +8425,154 @@ export default function App() {
                   </div>
                 ))
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── IN-APP DELETE BUS STOP CONFIRMATION MODAL ── */}
+      {pendingDeleteStop && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className={`w-full max-w-md rounded-2xl p-6 border shadow-2xl transition-all scale-100 ${
+              theme === "dark" 
+                ? "bg-[#131622] border-[#252a44] text-[#f0ede8]" 
+                : "bg-white border-[#ced0d4] text-[#090b0f]"
+            }`}
+          >
+            <div className="flex items-center gap-3.5 mb-4">
+              <div className="w-11 h-11 rounded-xl bg-red-500/15 text-red-500 border border-red-500/30 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="font-display font-extrabold text-base leading-tight">
+                  {language === "ta" ? "பேருந்து நிறுத்தம் நீக்குதல்" : "Delete Bus Timing"}
+                </h3>
+                <p className="text-xs text-[#7a7f96] mt-0.5">
+                  {language === "ta" ? "இந்த செயலை திரும்பப் பெற முடியாது" : "This action cannot be undone"}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs sm:text-sm text-[#7a7f96] mb-6 leading-relaxed">
+              {language === "ta" ? (
+                <>
+                  <span className="font-bold text-brand-yellow">"{pendingDeleteStop.name}"</span> என்ற பேருந்து நிறுத்த விபரங்களை நிச்சயமாக நீக்க விரும்புகிறீர்களா? இது நேரடி பதிவேட்டிலிருந்து அகற்றப்படும்.
+                </>
+              ) : (
+                <>
+                  Are you sure you want to delete <span className="font-bold text-brand-yellow">"{pendingDeleteStop.name}"</span>? It will be removed from all live boards.
+                </>
+              )}
+            </p>
+
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                disabled={isDeletingStop}
+                onClick={() => setPendingDeleteStop(null)}
+                className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                  theme === "dark" 
+                    ? "border-[#2e3150] bg-[#1a1d27] text-neutral-300 hover:bg-[#222537]" 
+                    : "border-neutral-300 bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
+                }`}
+              >
+                {language === "ta" ? "ரத்து செய்" : "Cancel"}
+              </button>
+
+              <button
+                type="button"
+                disabled={isDeletingStop}
+                onClick={executeConfirmDeleteStop}
+                className="px-5 py-2.5 rounded-xl text-xs font-extrabold bg-red-600 hover:bg-red-700 active:scale-95 text-white flex items-center gap-2 shadow-lg shadow-red-600/20 transition-all cursor-pointer border-none"
+              >
+                {isDeletingStop ? (
+                  <>
+                    <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                    <span>{language === "ta" ? "நீக்குகிறது..." : "Deleting..."}</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>{language === "ta" ? "ஆம், நீக்கு" : "Yes, Delete"}</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── IN-APP WIPE ALL ENTRIES CONFIRMATION MODAL ── */}
+      {showWipeAllConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className={`w-full max-w-md rounded-2xl p-6 border shadow-2xl ${
+              theme === "dark" 
+                ? "bg-[#131622] border-[#252a44] text-[#f0ede8]" 
+                : "bg-white border-[#ced0d4] text-[#090b0f]"
+            }`}
+          >
+            <div className="flex items-center gap-3.5 mb-4">
+              <div className="w-11 h-11 rounded-xl bg-red-500/15 text-red-500 border border-red-500/30 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-red-400" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="font-display font-extrabold text-base leading-tight">
+                  {language === "ta" ? "அனைத்து பதிவுகளையும் அழி" : "Wipe All Contributed Stops"}
+                </h3>
+                <p className="text-xs text-red-400 font-bold mt-0.5">
+                  {language === "ta" ? "எச்சரிக்கை: மொத்த நீக்கம்" : "Permanent Mass Removal"}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs sm:text-sm text-[#7a7f96] mb-6 leading-relaxed">
+              {language === "ta" ? (
+                <>
+                  உங்கள் கணக்கின் கீழ் உள்ள <b>அனைத்துப் பேருந்து நேரங்களையும்</b> முற்றிலுமாக அழிக்க விரும்புகிறீர்களா?
+                </>
+              ) : (
+                <>
+                  Are you sure you want to permanently delete <b>ALL of your contributed bus stops</b> from this platform?
+                </>
+              )}
+            </p>
+
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                disabled={isWipingAll}
+                onClick={() => setShowWipeAllConfirm(false)}
+                className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                  theme === "dark" 
+                    ? "border-[#2e3150] bg-[#1a1d27] text-neutral-300 hover:bg-[#222537]" 
+                    : "border-neutral-300 bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
+                }`}
+              >
+                {language === "ta" ? "ரத்து செய்" : "Cancel"}
+              </button>
+
+              <button
+                type="button"
+                disabled={isWipingAll}
+                onClick={executeConfirmClearAll}
+                className="px-5 py-2.5 rounded-xl text-xs font-extrabold bg-red-600 hover:bg-red-700 active:scale-95 text-white flex items-center gap-2 shadow-lg shadow-red-600/20 transition-all cursor-pointer border-none"
+              >
+                {isWipingAll ? (
+                  <>
+                    <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                    <span>{language === "ta" ? "அழிக்கிறது..." : "Wiping..."}</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>{language === "ta" ? "ஆம், அனைத்தையும் அழி" : "Yes, Wipe All"}</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>

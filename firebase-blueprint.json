@@ -20,6 +20,7 @@
         "contributorEmail": { "type": "string" },
         "activeDays": { "type": "string" },
         "excludedDays": { "type": "string" },
+        "cityRoute": { "type": "string" },
         "likeCount": { "type": "number" },
         "dislikeCount": { "type": "number" }
       },
