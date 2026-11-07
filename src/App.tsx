@@ -19,7 +19,7 @@ import {
   ChevronDown,
   LogIn, 
   Smartphone, 
-  Map, 
+  Map as MapIcon, 
   User, 
   Lock,
   XCircle,
@@ -842,7 +842,7 @@ export default function App() {
 
         const combined = [...localSugs, ...apiResults];
         const unique = Array.from(
-          (new (window as any).Map(combined.map(item => [item.display_name, item])) as any).values()
+          new Map(combined.map(item => [item.display_name, item])).values()
         ) as any[];
 
         setStartSuggestions(unique.slice(0, 8));
@@ -918,7 +918,7 @@ export default function App() {
 
         const combined = [...localSugs, ...apiResults];
         const unique = Array.from(
-          (new (window as any).Map(combined.map(item => [item.display_name, item])) as any).values()
+          new Map(combined.map(item => [item.display_name, item])).values()
         ) as any[];
 
         setEndSuggestions(unique.slice(0, 8));
@@ -4107,11 +4107,11 @@ export default function App() {
 
       // Also clean up from wishlist if present
       try {
-        const starRaw = localStorage.getItem("starred_stops_v1");
+        const starRaw = localStorage.getItem("starred_stops");
         if (starRaw) {
           const stars: string[] = JSON.parse(starRaw);
           const nextStars = stars.filter(sId => sId !== id);
-          localStorage.setItem("starred_stops_v1", JSON.stringify(nextStars));
+          localStorage.setItem("starred_stops", JSON.stringify(nextStars));
           setStarredStops(nextStars);
         }
       } catch (e) {}
@@ -4377,7 +4377,7 @@ export default function App() {
       });
 
     // Deduplicate locals and show them instantly
-    const uniqueLocals = Array.from((new (window as any).Map(locals.map(item => [item.display_name, item])) as any).values()) as any[];
+    const uniqueLocals = Array.from(new Map(locals.map(item => [item.display_name, item])).values()) as any[];
     setMapSearchSuggestions(uniqueLocals.slice(0, 4));
 
     // Clear previous scheduled API geocode fetches to debounce fast typing
@@ -4436,7 +4436,7 @@ export default function App() {
           }
 
           const combined = [...uniqueLocals, ...apiResults];
-          const uniqueCombined = Array.from((new (window as any).Map(combined.map(item => [item.display_name, item])) as any).values()) as any[];
+          const uniqueCombined = Array.from(new Map(combined.map(item => [item.display_name, item])).values()) as any[];
           setMapSearchSuggestions(uniqueCombined.slice(0, 10));
         } catch (err) {
           console.warn("Geocoding service fetch failed:", err);
@@ -5217,6 +5217,21 @@ export default function App() {
               </a>
 
               <a 
+                href="#about"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => { if (!e.metaKey && !e.ctrlKey) e.preventDefault(); navigateToTab("about"); }} 
+                className={`w-full py-4 px-5 rounded-xl font-bold flex items-center gap-4 text-left transition-all ${
+                  activeTab === "about"
+                    ? "bg-brand-yellow-light text-black shadow-md shadow-amber-500/10"
+                    : theme === "dark" ? "text-[#7a7f96] hover:bg-[#1a1d27]" : "text-[#65676b] hover:bg-[#e4e6eb]"
+                }`}
+              >
+                <Info className="w-5 h-5" />
+                <span className="uppercase">{t("about_app")}</span>
+              </a>
+
+              <a 
                 href="#settings"
                 target="_blank"
                 rel="noopener noreferrer"
@@ -5367,6 +5382,24 @@ export default function App() {
           </a>
 
           <a 
+            href="#about"
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => { if (!e.metaKey && !e.ctrlKey) e.preventDefault(); navigateToTab("about"); }} 
+            className={`w-full py-4 rounded-2xl font-bold flex items-center gap-4 text-left transition-all ${
+              isSidebarCollapsed ? "justify-center px-0" : "px-5"
+            } ${
+              activeTab === "about"
+                ? "bg-brand-yellow-light text-black shadow-xl shadow-amber-500/10"
+                : theme === "dark" ? "text-[#7a7f96] hover:bg-[#151a26]" : "text-[#65676b] hover:bg-[#e4e6eb]"
+            }`}
+            title="About App"
+          >
+            <Info className="w-5 h-5 flex-shrink-0" />
+            {!isSidebarCollapsed && <span className="tracking-wide">{t("about_app")}</span>}
+          </a>
+
+          <a 
             href="#settings"
             target="_blank"
             rel="noopener noreferrer"
@@ -5510,7 +5543,12 @@ export default function App() {
                 return (
                   <div className="text-center py-12">
                     <p className="text-[#7a7f96]">{t("detail_missing")}</p>
-                    <button onClick={() => setSelectedStopId(null)} className="mt-4 px-4 py-2 bg-brand-yellow text-black font-bold rounded-lg"></button>
+                    <button 
+                      onClick={() => setSelectedStopId(null)} 
+                      className="mt-4 px-4 py-2 bg-brand-yellow hover:bg-brand-yellow/90 text-black font-bold text-xs rounded-xl cursor-pointer transition-all"
+                    >
+                      {t("back_to_board")}
+                    </button>
                   </div>
                 );
               }
@@ -5770,7 +5808,7 @@ export default function App() {
                         {/* Elegant overlay to capture clicks and prevent external redirects, while prompting the user */}
                         <div className="absolute inset-0 bg-black/0 hover:bg-black/30 transition-colors flex flex-col items-center justify-center">
                           <div className="bg-black/80 text-brand-yellow font-extrabold text-xs px-4 py-2 rounded-xl opacity-0 group-hover:opacity-100 transition-all transform scale-95 group-hover:scale-100 flex items-center gap-2 shadow-2xl border border-brand-yellow/30">
-                            <Map className="w-4 h-4 animate-bounce text-brand-yellow" />
+                            <MapIcon className="w-4 h-4 animate-bounce text-brand-yellow" />
                             <span>{language === "ta" ? "இன்-ஆப் வரைபடத்தில் காட்டு" : "VIEW ON CUSTOM IN-APP MAP"}</span>
                           </div>
                         </div>
@@ -5829,7 +5867,7 @@ export default function App() {
                         }}
                         className="mt-3 w-full py-3.5 bg-brand-yellow hover:bg-brand-yellow/90 text-black font-extrabold text-sm rounded-xl flex items-center justify-center gap-2.5 shadow-md transition-all border-none outline-none cursor-pointer"
                       >
-                        <Map className="w-4 h-4" />
+                        <MapIcon className="w-4 h-4" />
                         <span>{language === "ta" ? "இன்-ஆப் மேப்பில் காட்டு / மையப்படுத்து" : "CENTER & HIGHLIGHT IN-APP MAP"}</span>
                       </button>
                     </div>
@@ -6760,7 +6798,7 @@ export default function App() {
                         }}
                         className="w-full py-2.5 px-4 bg-brand-yellow/10 hover:bg-brand-yellow/15 border border-dashed border-brand-yellow text-brand-yellow text-xs font-extrabold flex items-center justify-center gap-1.5 rounded-xl cursor-pointer transition-all"
                       >
-                        <Map className="w-3.5 h-3.5" />
+                        <MapIcon className="w-3.5 h-3.5" />
                         <span>{t("choose_map_btn")}</span>
                       </button>
                     )}
@@ -7215,7 +7253,7 @@ export default function App() {
                               type="email"
                               placeholder={t("email_address")}
                               required
-                              className={`w-full bg-transparent border-none outline-none font-semibold text-xs md:text-sm pl-3 pr-4 py-1- ${
+                              className={`w-full bg-transparent border-none outline-none font-semibold text-xs md:text-sm pl-3 pr-4 py-1.5 ${
                                 theme === "dark" ? "text-white placeholder-white/40" : "text-neutral-800 placeholder-neutral-400"
                               }`}
                               value={resetEmail}

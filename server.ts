@@ -83,6 +83,24 @@ app.get("/api/geocode", async (req, res) => {
     return res.json(customGeocodeCache.get(normalized));
   }
 
+  // 2.5 If no GEMINI_API_KEY configured, apply closest local query fallback directly
+  if (!process.env.GEMINI_API_KEY) {
+    let bestFallback = STATION_DATA["chennai"];
+    for (const [key, val] of Object.entries(STATION_DATA)) {
+      if (normalized.includes(key)) {
+        bestFallback = val;
+        break;
+      }
+    }
+    return res.json({
+      name: `${bestFallback.name} (Local Dataset)`,
+      state: bestFallback.state,
+      latitude: bestFallback.latitude,
+      longitude: bestFallback.longitude,
+      fallbackUsed: true
+    });
+  }
+
   try {
     const systemPrompt = `You are a specialist geographical geocoding assistant for India locations.
 Your job is to identify the location requested and extract its precise decimal latitude and longitude coordinates.
@@ -91,7 +109,7 @@ If the requested location does not exist in India or is outside India, please fi
 Return the response as a valid, pure JSON object container.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-2.0-flash",
       contents: `Extract the latitude and longitude for the location: ${query}. Strict Restriction: The location must be within India. Do not look for locations outside India.`,
       config: {
         systemInstruction: systemPrompt,
