@@ -1,4 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
+import { App as CapacitorApp } from "@capacitor/app";
+import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
+import { SplashScreen } from '@capacitor/splash-screen';
+import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
+import BusLoader from "./components/BusLoader";
 import { 
   Bus, 
   Search, 
@@ -38,7 +43,6 @@ import {
   BellRing,
   CheckCheck,
   AlertTriangle,
-  Zap,
   Copy,
   ExternalLink
 } from "lucide-react";
@@ -70,6 +74,7 @@ import {
   updateProfile, 
   GoogleAuthProvider, 
   signInWithPopup,
+  signInWithCredential,
   sendPasswordResetEmail,
   signInAnonymously
 } from "firebase/auth";
@@ -204,11 +209,6 @@ try {
     });
   }
 
-  if (auth && !auth.currentUser) {
-    signInAnonymously(auth).catch((err) => {
-      console.warn("Anonymous authentication auto-login notice:", err?.message || err);
-    });
-  }
 } catch (error) {
   console.warn("Firebase failed to initialize. Using LocalStorage fallback mode.", error);
 }
@@ -571,8 +571,37 @@ const TRANSLATIONS = {
 const INITIAL_OFFLINE_STOPS: BusStop[] = [];
 
 export default function App() {
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isAuthInitialized, setIsAuthInitialized] = useState(false);
+  const initialLoadingStartedAt = useRef(Date.now());
+  const initialLoadingCompleted = useRef(false);
+  const initialLoadingTimer = useRef<number | null>(null);
+
+  const finishInitialLoading = () => {
+    if (initialLoadingCompleted.current) return;
+    initialLoadingCompleted.current = true;
+    // Hide native splash screen immediately to reveal BusLoader
+    if (Capacitor.isNativePlatform()) {
+      SplashScreen.hide({ fadeOutDuration: 300 }).catch(() => {});
+    }
+    const remaining = Math.max(0, 900 - (Date.now() - initialLoadingStartedAt.current));
+    initialLoadingTimer.current = window.setTimeout(() => {
+      setIsInitialLoading(false);
+    }, remaining);
+  };
+
+  useEffect(() => () => {
+    if (initialLoadingTimer.current !== null) {
+      window.clearTimeout(initialLoadingTimer.current);
+      initialLoadingTimer.current = null;
+    }
+    initialLoadingCompleted.current = false;
+  }, []);
+
   // Navigation / Tabs State
   const [activeTab, setActiveTab] = useState<"view" | "add" | "owner" | "about" | "settings" | "login" | "wishlist">("view");
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
   const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
 
   // Sync active tab with URL hash on load
@@ -656,6 +685,8 @@ export default function App() {
   // Responsive sidebar state
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const isMobileMenuOpenRef = useRef(isMobileMenuOpen);
+  isMobileMenuOpenRef.current = isMobileMenuOpen;
 
   // In-app Delete Confirmation Modal State (Replaces blocked window.confirm)
   const [pendingDeleteStop, setPendingDeleteStop] = useState<{ id: string; name: string } | null>(null);
@@ -743,6 +774,9 @@ export default function App() {
   const [isEditing, setIsEditing] = useState(false);
   const [gpsStatus, setGpsStatus] = useState<"none" | "pinned" | "error">("none");
   const [showToast, setShowToast] = useState("");
+  const [showExitConfirmation, setShowExitConfirmation] = useState(false);
+  const exitConfirmationDeadlineRef = useRef(0);
+  const exitConfirmationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showStartSuggestions, setShowStartSuggestions] = useState(false);
   const [showEndSuggestions, setShowEndSuggestions] = useState(false);
 
@@ -1670,15 +1704,7 @@ export default function App() {
     return (session.email || session.username || session.uid || "").toLowerCase().trim();
   };
 
-  // Authentication State with instant synchronous restoration from localStorage
-  const [userSession, setUserSession] = useState<UserSession | null>(() => {
-    try {
-      const savedSess = localStorage.getItem("busStopSess_v1");
-      return savedSess ? JSON.parse(savedSess) : null;
-    } catch (e) {
-      return null;
-    }
-  });
+  const [userSession, setUserSession] = useState<UserSession | null>(null);
   const canEditStops = !!userSession && (activeTab === "add" || activeTab === "owner");
 
   // User Votes State (Per-user tracking: 'like' | 'dislike')
@@ -1810,7 +1836,9 @@ export default function App() {
         provider: "contributor_session"
       };
       addDoc(collection(db, "registered_members"), memberDoc).catch(() => {});
-      setDoc(doc(db, "users", sess.uid), memberDoc, { merge: true }).catch(() => {});
+      if (sess.uid) {
+  setDoc(doc(db, "users", sess.uid), memberDoc, { merge: true }).catch(() => {});
+}
     }
 
     setAuthSuccess("✅ Logged in successfully via Contributor Session!");
@@ -2360,6 +2388,98 @@ export default function App() {
     triggerToast("🧹 Notifications cleared!");
   };
 
+  useEffect(() => {
+    let disposed = false;
+    let authStateRevision = 0;
+
+    const showAuthenticatedHome = (session: UserSession) => {
+      setUserSession(session);
+      localStorage.setItem("busStopSess_v1", JSON.stringify(session));
+      activeTabRef.current = "view";
+      setActiveTab("view");
+      window.history.replaceState(null, "", "#view");
+    };
+
+    const showLogin = () => {
+      setUserSession(null);
+      localStorage.removeItem("busStopSess_v1");
+      activeTabRef.current = "login";
+      setActiveTab("login");
+      window.history.replaceState(null, "", "#login");
+    };
+
+    const resolveAuthState = async (firebaseUser: typeof auth.currentUser) => {
+      const revision = ++authStateRevision;
+      let session: UserSession | null = null;
+
+      if (firebaseUser && !firebaseUser.isAnonymous) {
+        session = {
+          uid: firebaseUser.uid,
+          username: firebaseUser.email?.split("@")[0] || "user",
+          name: firebaseUser.displayName || firebaseUser.email?.split("@")[0] || "Verified User",
+          email: firebaseUser.email || "",
+          photo: firebaseUser.photoURL,
+          type: "firebase_live"
+        };
+      } else if (Capacitor.getPlatform() === "android") {
+        try {
+          const { user: nativeUser } = await FirebaseAuthentication.getCurrentUser();
+          if (nativeUser && !nativeUser.isAnonymous) {
+            session = {
+              uid: nativeUser.uid,
+              username: nativeUser.email?.split("@")[0] || "user",
+              name: nativeUser.displayName || nativeUser.email?.split("@")[0] || "Verified User",
+              email: nativeUser.email || "",
+              photo: nativeUser.photoUrl,
+              type: "firebase_live"
+            };
+          }
+        } catch (error) {
+          console.error("Failed to restore the native Firebase authentication session:", error);
+        }
+      }
+
+      if (disposed || revision !== authStateRevision) return;
+
+      if (session) {
+        showAuthenticatedHome(session);
+      } else {
+        showLogin();
+      }
+      setIsAuthInitialized(true);
+      finishInitialLoading();
+    };
+
+    if (!firebaseInitialized || !auth) {
+      showLogin();
+      setIsAuthInitialized(true);
+      finishInitialLoading();
+      return () => {
+        disposed = true;
+      };
+    }
+
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      (firebaseUser) => {
+        void resolveAuthState(firebaseUser);
+      },
+      (error) => {
+        console.error("Firebase authentication state listener failed:", error);
+        if (!disposed) {
+          showLogin();
+          setIsAuthInitialized(true);
+          finishInitialLoading();
+        }
+      }
+    );
+
+    return () => {
+      disposed = true;
+      unsubscribe();
+    };
+  }, []);
+
   // --- COMPONENT DID MOUNT & LOCAL CONFIG RESCUE ---
   useEffect(() => {
     // 1. Recover Theme
@@ -2372,21 +2492,12 @@ export default function App() {
       document.documentElement.classList.remove("light-mode");
     }
 
-    // 2. Recover User Session
-    const savedSess = localStorage.getItem("busStopSess_v1");
-    if (savedSess) {
-      try {
-        setUserSession(JSON.parse(savedSess));
-      } catch (e) {
-        localStorage.removeItem("busStopSess_v1");
-      }
-    }
-
-    // 3. Initialize real-time sync with Google Firestore if possible
+    // 2. Initialize real-time sync with Google Firestore if possible
     if (firebaseInitialized && db) {
       try {
         const qStops = collection(db, "bus_updates");
         const unsubscribe = onSnapshot(qStops, (snapshot) => {
+          finishInitialLoading();
           const deletedRaw = localStorage.getItem("deleted_stops_v1");
           const deletedIds = new Set<string>(deletedRaw ? JSON.parse(deletedRaw) : []);
 
@@ -2494,6 +2605,7 @@ export default function App() {
           } catch (e) {}
           setUsingFirebaseRealtime(true);
         }, (error) => {
+          finishInitialLoading();
           const code = (error as any)?.code;
           if (code === "unavailable" || (error as any)?.message?.includes("offline")) {
             console.warn("Firestore listener operating in offline mode:", error?.message || error);
@@ -2502,27 +2614,13 @@ export default function App() {
           }
         });
 
-        // Setup real-time authentication listener
-        if (auth) {
-          onAuthStateChanged(auth, (firebaseUser) => {
-            if (firebaseUser && !firebaseUser.isAnonymous) {
-              const sess: UserSession = {
-                username: firebaseUser.email?.split("@")[0] || "user",
-                name: firebaseUser.displayName || firebaseUser.email?.split("@")[0] || "Verified User",
-                email: firebaseUser.email || "",
-                photo: firebaseUser.photoURL,
-                type: "firebase_live"
-              };
-              setUserSession(sess);
-              localStorage.setItem("busStopSess_v1", JSON.stringify(sess));
-            }
-          });
-        }
-
         return () => unsubscribe();
       } catch (e) {
+        finishInitialLoading();
         console.error("Firebase Snapshot registration failed", e);
       }
+    } else {
+      finishInitialLoading();
     }
   }, []);
 
@@ -3772,17 +3870,97 @@ export default function App() {
   };
 
   const toggleMobileMenu = () => {
-    setIsMobileMenuOpen(!isMobileMenuOpen);
+    const nextMenuState = !isMobileMenuOpenRef.current;
+    isMobileMenuOpenRef.current = nextMenuState;
+    setIsMobileMenuOpen(nextMenuState);
+  };
+
+  const resetExitConfirmation = () => {
+    exitConfirmationDeadlineRef.current = 0;
+    if (exitConfirmationTimerRef.current !== null) {
+      clearTimeout(exitConfirmationTimerRef.current);
+      exitConfirmationTimerRef.current = null;
+    }
+    setShowExitConfirmation(false);
   };
 
   const navigateToTab = (tab: "view" | "add" | "owner" | "about" | "settings" | "login" | "wishlist") => {
+    resetExitConfirmation();
+    activeTabRef.current = tab;
     setActiveTab(tab);
     setSelectedStopId(null);
+    isMobileMenuOpenRef.current = false;
     setIsMobileMenuOpen(false);
     try {
       window.location.hash = tab;
     } catch (e) {}
   };
+
+  useEffect(() => {
+    if (Capacitor.getPlatform() !== "android") return;
+
+    let disposed = false;
+    let backButtonListener: PluginListenerHandle | null = null;
+
+    const handleBackButton = async () => {
+      if (isMobileMenuOpenRef.current) {
+        isMobileMenuOpenRef.current = false;
+        setIsMobileMenuOpen(false);
+        resetExitConfirmation();
+        return;
+      }
+
+      if (activeTabRef.current !== "view") {
+        navigateToTab("view");
+        return;
+      }
+
+      if (Date.now() < exitConfirmationDeadlineRef.current) {
+        resetExitConfirmation();
+        try {
+          await CapacitorApp.exitApp();
+        } catch (error) {
+          console.error("Failed to exit the app:", error);
+        }
+        return;
+      }
+
+      resetExitConfirmation();
+      exitConfirmationDeadlineRef.current = Date.now() + 2000;
+      setShowExitConfirmation(true);
+      exitConfirmationTimerRef.current = setTimeout(() => {
+        resetExitConfirmation();
+      }, 2000);
+    };
+
+    const registerBackButtonListener = async () => {
+      const listener = await CapacitorApp.addListener("backButton", handleBackButton);
+      if (disposed) {
+        await listener.remove();
+      } else {
+        backButtonListener = listener;
+      }
+    };
+
+    void registerBackButtonListener().catch((error) => {
+      console.error("Failed to register the Android back button listener:", error);
+    });
+
+    return () => {
+      disposed = true;
+      if (backButtonListener) {
+        void backButtonListener.remove().catch((error) => {
+          console.error("Failed to remove the Android back button listener:", error);
+        });
+        backButtonListener = null;
+      }
+      if (exitConfirmationTimerRef.current !== null) {
+        clearTimeout(exitConfirmationTimerRef.current);
+        exitConfirmationTimerRef.current = null;
+      }
+      exitConfirmationDeadlineRef.current = 0;
+    };
+  }, []);
 
   // --- BUS REGISTRY CONTROLLING ACTIONS ---
   
@@ -4949,8 +5127,21 @@ export default function App() {
     }
     
     try {
-      const result = await signInWithPopup(auth, googleProvider);
-      const user = result.user;
+      let user;
+      if (Capacitor.isNativePlatform()) {
+        const nativeResult = await FirebaseAuthentication.signInWithGoogle();
+        const idToken = nativeResult.credential?.idToken;
+        if (!idToken) {
+          throw new Error("Google sign-in did not return an ID token.");
+        }
+        const credential = GoogleAuthProvider.credential(idToken);
+        const result = await signInWithCredential(auth, credential);
+        user = result.user;
+      } else {
+        const result = await signInWithPopup(auth, googleProvider);
+        user = result.user;
+      }
+
       const sess: UserSession = {
         uid: user.uid,
         username: user.email?.split("@")[0] || "google_user",
@@ -5003,17 +5194,23 @@ export default function App() {
 
 
   const handleLogout = async () => {
-    if (firebaseInitialized && auth) {
-      try {
-        await signOut(auth);
-      } catch (e) {
-        console.warn("Firebase signout error", e);
+    try {
+      if (Capacitor.isNativePlatform()) {
+        await FirebaseAuthentication.signOut();
       }
+      if (firebaseInitialized && auth) {
+        await signOut(auth);
+      }
+    } catch (error) {
+      console.error("Firebase signout failed:", error);
+      triggerToast("❗ Could not sign out. Please try again.");
+      return;
     }
+
     setUserSession(null);
     localStorage.removeItem("busStopSess_v1");
     triggerToast("🚪 Logged out successfully. See you again!");
-    setActiveTab("view");
+    navigateToTab("login");
   };
 
   // --- SEARCH AND FILTER FILTERING PIPELINES ---
@@ -5038,6 +5235,7 @@ export default function App() {
         ? "bg-[#090b0f] text-[#f0ede8]" 
         : "bg-[#f4f6fa] text-[#090b0f]"
     }`}>
+      <BusLoader isLoading={isInitialLoading || !isAuthInitialized} message="Finding bus stops..." />
       
       {/* ── TOAST NOTIFICATIONS ── */}
       {showToast && (
@@ -5047,27 +5245,47 @@ export default function App() {
         </div>
       )}
 
+      <div
+        role="status"
+        aria-live="polite"
+        aria-hidden={!showExitConfirmation}
+        className={`fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full border px-4 py-2 text-xs font-bold shadow-xl transition-all duration-300 ease-out ${
+          theme === "dark"
+            ? "border-brand-yellow bg-[#111322] text-[#f0ede8]"
+            : "border-brand-yellow bg-white text-[#090b0f]"
+        } ${
+          showExitConfirmation
+            ? "translate-y-0 opacity-100"
+            : "translate-y-3 opacity-0 pointer-events-none"
+        }`}
+      >
+        Press back again to exit
+      </div>
+
       {/* ── MOBILE HEADER (Visible only on touch layout phones) ── */}
-      <header className={`md:hidden flex items-center justify-between px-5 py-4 border-b z-40 sticky top-0 backdrop-blur-md ${
+      <header className={`md:hidden flex items-center justify-between px-3 min-[375px]:px-5 py-3 border-b z-40 sticky top-0 backdrop-blur-md ${
         theme === "dark" 
           ? "bg-[#0d0f18]/90 border-[#1c1f33]/85" 
           : "bg-white/90 border-[#ced0d4]/80"
       }`}>
-        <div className="flex items-center gap-3" onClick={() => navigateToTab("view")}>
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-yellow to-orange-500 flex items-center justify-center text-black font-extrabold text-xl shadow-md">
-            🚌
-          </div>
+        <div className="flex items-center gap-2 min-[375px]:gap-3 cursor-pointer" onClick={() => navigateToTab("view")}>
+          <img 
+            src="/user-stop-logo.webp" 
+            alt="User Stop" 
+            className="w-11 h-11 min-[375px]:w-12 min-[375px]:h-12 rounded-xl shadow-md object-contain"
+            loading="eager"
+          />
           <div>
-            <h1 className="font-display font-extrabold text-xs tracking-wider leading-none text-brand-yellow">USER STOP</h1>
+            <h1 className="font-display font-extrabold text-[10px] min-[375px]:text-xs tracking-normal min-[375px]:tracking-wider leading-none text-brand-yellow whitespace-nowrap">USER STOP</h1>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 min-[375px]:gap-2">
           {/* Notification Bell Icon */}
           <button
             type="button"
             onClick={() => setIsNotificationOpen(!isNotificationOpen)}
-            className={`relative p-2 rounded-xl border text-sm transition-all active:scale-95 cursor-pointer ${
+            className={`relative p-1.5 min-[375px]:p-2 rounded-xl border text-sm transition-all active:scale-95 cursor-pointer ${
               theme === "dark" ? "border-[#2e3150] bg-[#1a1d27]" : "border-[#ced0d4] bg-white"
             }`}
             aria-label="Notifications"
@@ -5084,7 +5302,7 @@ export default function App() {
           {/* Theme Switcher */}
           <button 
             onClick={toggleTheme} 
-            className={`p-2 rounded-xl border text-sm transition-all active:scale-95 ${
+            className={`p-1.5 min-[375px]:p-2 rounded-xl border text-sm transition-all active:scale-95 ${
               theme === "dark" ? "border-[#2e3150] bg-[#1a1d27]" : "border-[#ced0d4] bg-white"
             }`}
             aria-label="Toggle Theme"
@@ -5110,7 +5328,7 @@ export default function App() {
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => { if (!e.metaKey && !e.ctrlKey) e.preventDefault(); navigateToTab("login"); }} 
-              className={`p-2 rounded-xl border transition-all active:scale-95 ${
+              className={`p-1.5 min-[375px]:p-2 rounded-xl border transition-all active:scale-95 ${
                 theme === "dark" ? "border-[#2e3150] bg-[#1a1d27]" : "border-[#ced0d4] bg-white"
               }`}
             >
@@ -5121,7 +5339,7 @@ export default function App() {
           {/* Mobile hamburger menu */}
           <button 
             onClick={toggleMobileMenu} 
-            className={`p-2 rounded-xl border transition-all active:scale-95 ${
+            className={`p-1.5 min-[375px]:p-2 rounded-xl border transition-all active:scale-95 ${
               theme === "dark" ? "border-[#2e3150] bg-[#1a1d27]" : "border-[#ced0d4] bg-white"
             }`}
             aria-label="Open Menu"
@@ -5132,24 +5350,35 @@ export default function App() {
       </header>
 
       {/* ── MOBILE NAVIGATION PANEL (Sliding full layout drawer) ── */}
-      {isMobileMenuOpen && (
-        <div className="fixed inset-0 z-40 md:hidden flex">
-          {/* Backdrop */}
-          <div 
-            onClick={toggleMobileMenu} 
-            className="fixed inset-0 bg-black/70 backdrop-blur-sm"
-          />
+      <div 
+        className={`fixed inset-0 z-40 md:hidden flex transition-opacity duration-300 ease-in-out ${
+          isMobileMenuOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+        }`}
+        aria-hidden={!isMobileMenuOpen}
+      >
+        {/* Backdrop */}
+        <div 
+          onClick={toggleMobileMenu} 
+          className={`fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity duration-300 ease-in-out ${
+            isMobileMenuOpen ? "opacity-100" : "opacity-0"
+          }`}
+        />
 
-          {/* Drawer body */}
-          <div className={`relative w-[280px] max-w-[85vw] h-full flex flex-col p-6 z-40 transition-transform duration-300 overflow-y-auto ${
-            theme === "dark" ? "bg-[#0f1117]" : "bg-white"
-          }`}>
+        {/* Drawer body */}
+        <div className={`relative w-[280px] max-w-[85vw] h-full flex flex-col p-6 z-40 transform transition-transform duration-300 ease-in-out will-change-transform overflow-y-auto ${
+          isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+        } ${
+          theme === "dark" ? "bg-[#0f1117]" : "bg-white"
+        }`}>
             <div className="flex items-center gap-3 mb-8">
-              <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-brand-yellow to-orange-500 flex items-center justify-center text-black font-extrabold text-2xl shadow-lg">
-                🚌
-              </div>
+              <img 
+                src="/user-stop-logo.webp" 
+                alt="User Stop" 
+                className="w-11 h-11 rounded-xl shadow-lg object-contain"
+                loading="eager"
+              />
               <div>
-                <h1 className="font-display font-extrabold text-sm tracking-wide">TN BUS STOP</h1>
+                <h1 className="font-display font-extrabold text-sm tracking-wide">USER STOP</h1>
                 <p className="text-[10px] text-brand-yellow font-extrabold uppercase mt-0.5">COMMUNITY REGISTRY</p>
               </div>
             </div>
@@ -5285,7 +5514,6 @@ export default function App() {
             </div>
           </div>
         </div>
-      )}
 
       {/* ── DESKTOP PERMANENT SIDEBAR Layout ── */}
       <aside className={`hidden md:flex flex-col py-8 px-6 border-r flex-shrink-0 transition-all duration-300 z-30 sticky top-0 h-screen overflow-y-auto ${
@@ -5297,9 +5525,13 @@ export default function App() {
       }`}>
         {/* LOGO */}
         <div className={`flex items-center gap-4 mb-10 ${isSidebarCollapsed ? "justify-center" : ""}`}>
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-brand-yellow to-orange-500 flex items-center justify-center text-black font-extrabold text-2xl shadow-md cursor-pointer hover:rotate-6 transition-transform" onClick={toggleSidebar}>
-            🚌
-          </div>
+          <img 
+            src="/user-stop-logo.webp" 
+            alt="User Stop" 
+            className="w-12 h-12 rounded-xl shadow-md cursor-pointer hover:rotate-6 transition-transform object-contain"
+            onClick={toggleSidebar}
+            loading="eager"
+          />
           {!isSidebarCollapsed && (
             <div>
               <h1 className="font-display font-extrabold text-md tracking-wider leading-none text-brand-yellow">USER STOP</h1>
@@ -7451,26 +7683,6 @@ export default function App() {
                       </svg>
                       <span>{t("sign_in_google")}</span>
                     </button>
-                    {/* Instant Contributor Quick Access option */}
-                    <div className="flex items-center gap-2.5 my-3 text-[10px] text-neutral-500 font-bold uppercase tracking-wider select-none justify-center">
-                      <hr className="flex-1 opacity-20" />
-                      <span>OR TEST QUICKLY</span>
-                      <hr className="flex-1 opacity-20" />
-                    </div>
-
-                    <button 
-                      type="button"
-                      onClick={() => activateLocalContributorSession(authForm.email, authForm.name)}
-                      className={`w-full py-2.5 rounded-full border font-bold text-[10px] uppercase flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                        theme === "dark" 
-                          ? "border-amber-400/40 bg-amber-400/10 hover:bg-amber-400/20 text-amber-300" 
-                          : "border-amber-400/60 bg-amber-50 hover:bg-amber-100 text-amber-800"
-                      }`}
-                    >
-                      <Zap className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Instant Contributor Access (Demo / Preview)</span>
-                    </button>
-
                     {/* Referer domain restriction information & guide toggle */}
                     <div className="mt-4 pt-3 border-t border-white/5">
                       <button
@@ -7528,7 +7740,6 @@ export default function App() {
                             <li>Edit API Key <code>AIzaSyC_Mg9liHN8zVa0e0W7hr5N_NhnQhPYqUA</code>.</li>
                             <li>Under <em>Website restrictions</em>, add this origin with <code className="text-neutral-200">/*</code> or set to <em>None</em>.</li>
                             <li>In Firebase Console &gt; Authentication &gt; Settings &gt; Authorized domains, add this domain.</li>
-                            <li className="text-amber-400/90 font-semibold">Or simply click "Instant Contributor Access" above to test all features immediately!</li>
                           </ol>
                         </div>
                       )}

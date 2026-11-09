@@ -9,3 +9,12 @@ coverage/
 !.env.example
 bun.lock
 bun.lockb
+
+# Android temporary files
+android/.gradle/
+android/local.properties
+android/app/build/
+
+# Signing keys - never upload
+*.jks
+*.keystore
