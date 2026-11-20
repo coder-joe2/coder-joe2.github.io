@@ -1,9 +1,4 @@
 import React, { useState, useEffect, useRef } from "react";
-import { App as CapacitorApp } from "@capacitor/app";
-import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
-import { SplashScreen } from '@capacitor/splash-screen';
-import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
-import BusLoader from "./components/BusLoader";
 import { 
   Bus, 
   Search, 
@@ -24,7 +19,7 @@ import {
   ChevronDown,
   LogIn, 
   Smartphone, 
-  Map as MapIcon, 
+  Map, 
   User, 
   Lock,
   XCircle,
@@ -43,6 +38,7 @@ import {
   BellRing,
   CheckCheck,
   AlertTriangle,
+  Zap,
   Copy,
   ExternalLink
 } from "lucide-react";
@@ -74,9 +70,7 @@ import {
   updateProfile, 
   GoogleAuthProvider, 
   signInWithPopup,
-  signInWithCredential,
-  sendPasswordResetEmail,
-  signInAnonymously
+  sendPasswordResetEmail
 } from "firebase/auth";
 import firebaseAppConfig from "../firebase-applet-config.json";
 
@@ -208,7 +202,6 @@ try {
       }
     });
   }
-
 } catch (error) {
   console.warn("Firebase failed to initialize. Using LocalStorage fallback mode.", error);
 }
@@ -313,7 +306,7 @@ const TRANSLATIONS = {
     bus_stop_city_placeholder: "e.g. Karur, Trichy, Coimbatore",
     active_days_lbl: "Active Days*",
     active_days_placeholder: "e.g. Sunday Only, All Days, Weekdays",
-    excluded_days_lbl: "Excluded Days*",
+    excluded_days_lbl: "Leave Days*",
     excluded_days_placeholder: "e.g. Except School Holidays, Sundays, None",
     route_lbl: "Route",
     crowd_level_lbl: "Crowd Level",
@@ -465,7 +458,7 @@ const TRANSLATIONS = {
     bus_stop_city_placeholder: "எ.கா. கரூர், திருச்சி, கோயம்புத்தூர்",
     active_days_lbl: "இயங்கும் நாட்கள்*",
     active_days_placeholder: "எ.கா. அனைத்து நாட்களும், ஞாயிறு மட்டும்",
-    excluded_days_lbl: "தவிர்க்கப்பட்ட நாட்கள்*",
+    excluded_days_lbl: "விடுமுறை நாட்கள் (Leave Days)*",
     excluded_days_placeholder: "எ.கா. விடுமுறை நாட்கள் தவிர, இல்லை",
     route_lbl: "வழித்தடம்",
     crowd_level_lbl: "கூட்ட நெரிசல் அளவு",
@@ -571,37 +564,8 @@ const TRANSLATIONS = {
 const INITIAL_OFFLINE_STOPS: BusStop[] = [];
 
 export default function App() {
-  const [isInitialLoading, setIsInitialLoading] = useState(true);
-  const [isAuthInitialized, setIsAuthInitialized] = useState(false);
-  const initialLoadingStartedAt = useRef(Date.now());
-  const initialLoadingCompleted = useRef(false);
-  const initialLoadingTimer = useRef<number | null>(null);
-
-  const finishInitialLoading = () => {
-    if (initialLoadingCompleted.current) return;
-    initialLoadingCompleted.current = true;
-    // Hide native splash screen immediately to reveal BusLoader
-    if (Capacitor.isNativePlatform()) {
-      SplashScreen.hide({ fadeOutDuration: 300 }).catch(() => {});
-    }
-    const remaining = Math.max(0, 900 - (Date.now() - initialLoadingStartedAt.current));
-    initialLoadingTimer.current = window.setTimeout(() => {
-      setIsInitialLoading(false);
-    }, remaining);
-  };
-
-  useEffect(() => () => {
-    if (initialLoadingTimer.current !== null) {
-      window.clearTimeout(initialLoadingTimer.current);
-      initialLoadingTimer.current = null;
-    }
-    initialLoadingCompleted.current = false;
-  }, []);
-
   // Navigation / Tabs State
   const [activeTab, setActiveTab] = useState<"view" | "add" | "owner" | "about" | "settings" | "login" | "wishlist">("view");
-  const activeTabRef = useRef(activeTab);
-  activeTabRef.current = activeTab;
   const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
 
   // Sync active tab with URL hash on load
@@ -685,8 +649,6 @@ export default function App() {
   // Responsive sidebar state
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const isMobileMenuOpenRef = useRef(isMobileMenuOpen);
-  isMobileMenuOpenRef.current = isMobileMenuOpen;
 
   // In-app Delete Confirmation Modal State (Replaces blocked window.confirm)
   const [pendingDeleteStop, setPendingDeleteStop] = useState<{ id: string; name: string } | null>(null);
@@ -774,9 +736,6 @@ export default function App() {
   const [isEditing, setIsEditing] = useState(false);
   const [gpsStatus, setGpsStatus] = useState<"none" | "pinned" | "error">("none");
   const [showToast, setShowToast] = useState("");
-  const [showExitConfirmation, setShowExitConfirmation] = useState(false);
-  const exitConfirmationDeadlineRef = useRef(0);
-  const exitConfirmationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showStartSuggestions, setShowStartSuggestions] = useState(false);
   const [showEndSuggestions, setShowEndSuggestions] = useState(false);
 
@@ -876,7 +835,7 @@ export default function App() {
 
         const combined = [...localSugs, ...apiResults];
         const unique = Array.from(
-          new Map(combined.map(item => [item.display_name, item])).values()
+          (new (window as any).Map(combined.map(item => [item.display_name, item])) as any).values()
         ) as any[];
 
         setStartSuggestions(unique.slice(0, 8));
@@ -952,7 +911,7 @@ export default function App() {
 
         const combined = [...localSugs, ...apiResults];
         const unique = Array.from(
-          new Map(combined.map(item => [item.display_name, item])).values()
+          (new (window as any).Map(combined.map(item => [item.display_name, item])) as any).values()
         ) as any[];
 
         setEndSuggestions(unique.slice(0, 8));
@@ -982,6 +941,11 @@ export default function App() {
   const [pinBSet, setPinBSet] = useState(false);
   const [busPinSet, setBusPinSet] = useState(false);
   const [mapStep, setMapStep] = useState<1 | 2>(1);
+  const [mapMode, setMapMode] = useState<"route" | "single">("route");
+  const mapModeRef = useRef<"route" | "single">("route");
+  useEffect(() => {
+    mapModeRef.current = mapMode;
+  }, [mapMode]);
   const [showStep1Instructions, setShowStep1Instructions] = useState(false);
   const [showBottomSheetInstructions, setShowBottomSheetInstructions] = useState(false);
   const [bottomPanelCollapsed, setBottomPanelCollapsed] = useState(true);
@@ -1532,6 +1496,7 @@ export default function App() {
               crowdLevel
             };
           }
+          pinCStopsRef.current = copy;
           syncStopsToRegistry(copy);
           return copy;
         });
@@ -1704,7 +1669,15 @@ export default function App() {
     return (session.email || session.username || session.uid || "").toLowerCase().trim();
   };
 
-  const [userSession, setUserSession] = useState<UserSession | null>(null);
+  // Authentication State with instant synchronous restoration from localStorage
+  const [userSession, setUserSession] = useState<UserSession | null>(() => {
+    try {
+      const savedSess = localStorage.getItem("busStopSess_v1");
+      return savedSess ? JSON.parse(savedSess) : null;
+    } catch (e) {
+      return null;
+    }
+  });
   const canEditStops = !!userSession && (activeTab === "add" || activeTab === "owner");
 
   // User Votes State (Per-user tracking: 'like' | 'dislike')
@@ -1836,9 +1809,7 @@ export default function App() {
         provider: "contributor_session"
       };
       addDoc(collection(db, "registered_members"), memberDoc).catch(() => {});
-      if (sess.uid) {
-  setDoc(doc(db, "users", sess.uid), memberDoc, { merge: true }).catch(() => {});
-}
+      setDoc(doc(db, "users", sess.uid), memberDoc, { merge: true }).catch(() => {});
     }
 
     setAuthSuccess("✅ Logged in successfully via Contributor Session!");
@@ -1952,7 +1923,6 @@ export default function App() {
     // 3. Atomically update Firestore
     if (db && !stopId.startsWith("local-") && !stopId.startsWith("off-")) {
       try {
-        if (auth && !auth.currentUser) await signInAnonymously(auth).catch(() => {});
         const docRef = doc(db, "bus_updates", stopId);
         const updates: any = {
           likeCount: increment(1),
@@ -2036,7 +2006,6 @@ export default function App() {
     // 3. Atomically update Firestore
     if (db && !stopId.startsWith("local-") && !stopId.startsWith("off-")) {
       try {
-        if (auth && !auth.currentUser) await signInAnonymously(auth).catch(() => {});
         const docRef = doc(db, "bus_updates", stopId);
         const updates: any = {
           dislikeCount: increment(1),
@@ -2289,11 +2258,6 @@ export default function App() {
 
     try {
       if (db) {
-        if (auth && !auth.currentUser) {
-          try {
-            await signInAnonymously(auth);
-          } catch (aErr) {}
-        }
         try {
           await addDoc(collection(db, "bus_notifications"), newNotif);
         } catch (fErr) {
@@ -2388,98 +2352,6 @@ export default function App() {
     triggerToast("🧹 Notifications cleared!");
   };
 
-  useEffect(() => {
-    let disposed = false;
-    let authStateRevision = 0;
-
-    const showAuthenticatedHome = (session: UserSession) => {
-      setUserSession(session);
-      localStorage.setItem("busStopSess_v1", JSON.stringify(session));
-      activeTabRef.current = "view";
-      setActiveTab("view");
-      window.history.replaceState(null, "", "#view");
-    };
-
-    const showLogin = () => {
-      setUserSession(null);
-      localStorage.removeItem("busStopSess_v1");
-      activeTabRef.current = "login";
-      setActiveTab("login");
-      window.history.replaceState(null, "", "#login");
-    };
-
-    const resolveAuthState = async (firebaseUser: typeof auth.currentUser) => {
-      const revision = ++authStateRevision;
-      let session: UserSession | null = null;
-
-      if (firebaseUser && !firebaseUser.isAnonymous) {
-        session = {
-          uid: firebaseUser.uid,
-          username: firebaseUser.email?.split("@")[0] || "user",
-          name: firebaseUser.displayName || firebaseUser.email?.split("@")[0] || "Verified User",
-          email: firebaseUser.email || "",
-          photo: firebaseUser.photoURL,
-          type: "firebase_live"
-        };
-      } else if (Capacitor.getPlatform() === "android") {
-        try {
-          const { user: nativeUser } = await FirebaseAuthentication.getCurrentUser();
-          if (nativeUser && !nativeUser.isAnonymous) {
-            session = {
-              uid: nativeUser.uid,
-              username: nativeUser.email?.split("@")[0] || "user",
-              name: nativeUser.displayName || nativeUser.email?.split("@")[0] || "Verified User",
-              email: nativeUser.email || "",
-              photo: nativeUser.photoUrl,
-              type: "firebase_live"
-            };
-          }
-        } catch (error) {
-          console.error("Failed to restore the native Firebase authentication session:", error);
-        }
-      }
-
-      if (disposed || revision !== authStateRevision) return;
-
-      if (session) {
-        showAuthenticatedHome(session);
-      } else {
-        showLogin();
-      }
-      setIsAuthInitialized(true);
-      finishInitialLoading();
-    };
-
-    if (!firebaseInitialized || !auth) {
-      showLogin();
-      setIsAuthInitialized(true);
-      finishInitialLoading();
-      return () => {
-        disposed = true;
-      };
-    }
-
-    const unsubscribe = onAuthStateChanged(
-      auth,
-      (firebaseUser) => {
-        void resolveAuthState(firebaseUser);
-      },
-      (error) => {
-        console.error("Firebase authentication state listener failed:", error);
-        if (!disposed) {
-          showLogin();
-          setIsAuthInitialized(true);
-          finishInitialLoading();
-        }
-      }
-    );
-
-    return () => {
-      disposed = true;
-      unsubscribe();
-    };
-  }, []);
-
   // --- COMPONENT DID MOUNT & LOCAL CONFIG RESCUE ---
   useEffect(() => {
     // 1. Recover Theme
@@ -2492,12 +2364,21 @@ export default function App() {
       document.documentElement.classList.remove("light-mode");
     }
 
-    // 2. Initialize real-time sync with Google Firestore if possible
+    // 2. Recover User Session
+    const savedSess = localStorage.getItem("busStopSess_v1");
+    if (savedSess) {
+      try {
+        setUserSession(JSON.parse(savedSess));
+      } catch (e) {
+        localStorage.removeItem("busStopSess_v1");
+      }
+    }
+
+    // 3. Initialize real-time sync with Google Firestore if possible
     if (firebaseInitialized && db) {
       try {
         const qStops = collection(db, "bus_updates");
         const unsubscribe = onSnapshot(qStops, (snapshot) => {
-          finishInitialLoading();
           const deletedRaw = localStorage.getItem("deleted_stops_v1");
           const deletedIds = new Set<string>(deletedRaw ? JSON.parse(deletedRaw) : []);
 
@@ -2605,7 +2486,6 @@ export default function App() {
           } catch (e) {}
           setUsingFirebaseRealtime(true);
         }, (error) => {
-          finishInitialLoading();
           const code = (error as any)?.code;
           if (code === "unavailable" || (error as any)?.message?.includes("offline")) {
             console.warn("Firestore listener operating in offline mode:", error?.message || error);
@@ -2614,13 +2494,27 @@ export default function App() {
           }
         });
 
+        // Setup real-time authentication listener
+        if (auth) {
+          onAuthStateChanged(auth, (firebaseUser) => {
+            if (firebaseUser && !firebaseUser.isAnonymous) {
+              const sess: UserSession = {
+                username: firebaseUser.email?.split("@")[0] || "user",
+                name: firebaseUser.displayName || firebaseUser.email?.split("@")[0] || "Verified User",
+                email: firebaseUser.email || "",
+                photo: firebaseUser.photoURL,
+                type: "firebase_live"
+              };
+              setUserSession(sess);
+              localStorage.setItem("busStopSess_v1", JSON.stringify(sess));
+            }
+          });
+        }
+
         return () => unsubscribe();
       } catch (e) {
-        finishInitialLoading();
         console.error("Firebase Snapshot registration failed", e);
       }
-    } else {
-      finishInitialLoading();
     }
   }, []);
 
@@ -2677,6 +2571,44 @@ export default function App() {
       }
     };
 
+    // Helper for Step 1 Start-to-End route calculation failure ("This route so tough")
+    const handleStep1ToughRoute = () => {
+      clearAlts();
+      setRouteError("This route so tough");
+      setRouteDistance(null);
+      setRouteDuration(null);
+      setPinASet(false);
+      pinASetRef.current = false;
+      setPinBSet(false);
+      pinBSetRef.current = false;
+      setActivePinSelector("A");
+      activePinSelectorRef.current = "A";
+      lastValidRouteLatLngsRef.current = null;
+      lastValidDistanceRef.current = null;
+      lastValidDurationRef.current = null;
+      if (poly) {
+        try {
+          poly.setLatLngs([]);
+          poly.remove();
+        } catch (e) {}
+      }
+      if (pickerMarkerInstance) {
+        try { pickerMarkerInstance.remove(); } catch (e) {}
+      }
+      if (pickerMarkerBInstance) {
+        try { pickerMarkerBInstance.remove(); } catch (e) {}
+      }
+      resetRouteWaypoint();
+      triggerToast(
+        language === "ta"
+          ? "⚠️ This route so tough! தொடக்க மற்றும் முடிவு இடங்கள் ரத்து செய்யப்பட்டன."
+          : "⚠️ This route so tough! Start and End pins have been cancelled."
+      );
+      setTimeout(() => {
+        setRouteError(prev => (prev === "This route so tough" ? null : prev));
+      }, 4500);
+    };
+
     setIsRouteLoading(true);
     try {
       // Build points array: start -> intermediate stops / waypoint -> end
@@ -2707,7 +2639,14 @@ export default function App() {
       // OSRM only supports alternatives=true when there are exactly 2 points
       const url = `https://router.project-osrm.org/route/v1/driving/${coordString}?overview=full&geometries=geojson${hasIntermediate ? "" : "&alternatives=true"}`;
 
-      const response = await fetch(url);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+      let response: Response;
+      try {
+        response = await fetch(url, { signal: controller.signal });
+      } finally {
+        clearTimeout(timeoutId);
+      }
       if (!response.ok) {
         throw new Error("OSRM routing request failed with HTTP " + response.status);
       }
@@ -2731,8 +2670,16 @@ export default function App() {
         }
 
         const primaryRoute = data.routes[0];
-        const coordinates = primaryRoute.geometry.coordinates; // Array of [lng, lat]
+        const coordinates = primaryRoute.geometry?.coordinates || []; // Array of [lng, lat]
         const latLngs = coordinates.map((coord: [number, number]) => [coord[1], coord[0]]);
+
+        if (latLngs.length < 2) {
+          if (mapStepRef.current === 1 && !hasIntermediate) {
+            handleStep1ToughRoute();
+            return false;
+          }
+          throw new Error("Empty OSRM geometry");
+        }
 
         const firstCoord = latLngs[0];
         const lastCoord = latLngs[latLngs.length - 1];
@@ -2740,7 +2687,16 @@ export default function App() {
         const distToEnd = getDistanceInMeters(lastCoord[0], lastCoord[1], end.lat, end.lng);
         const hasSpur = hasIntermediate && hasBacktrackingSpur(latLngs);
 
-        if (hasUnconnectedStop || distToEnd > 65 || distToStart > 65 || hasSpur) {
+        // Step 1 allows up to 500m snap distance (e.g. large Bus Stands / town centers), Step 2 requires strict 65m road snap
+        const maxEndpointSnap = (!hasIntermediate && mapStepRef.current === 1) ? 500 : 65;
+        const isCollapsedStraightLine = !hasIntermediate && primaryRoute.distance > 1500 && latLngs.length <= 2;
+
+        if (hasUnconnectedStop || distToEnd > maxEndpointSnap || distToStart > maxEndpointSnap || hasSpur || isCollapsedStraightLine) {
+          if (mapStepRef.current === 1 && !hasIntermediate) {
+            handleStep1ToughRoute();
+            return false;
+          }
+
           clearAlts();
           setRouteError("Route not available");
 
@@ -2749,7 +2705,7 @@ export default function App() {
             ? (language === "ta" 
                 ? "⚠️ கூடுதல் முட்டுச்சந்து (Dead-end spur) கண்டறியப்பட்டது! Route not available. முந்தைய சரியான வழித்தடத்திற்கு மீட்டமைக்கப்பட்டது." 
                 : "⚠️ Dead-end spur detected! Route not available. Reverted to previous valid route.")
-            : (distToEnd > 65
+            : (distToEnd > maxEndpointSnap
                 ? (language === "ta"
                     ? "⚠️ முடிவு புள்ளியுடன் (END pin) பாதை இணையவில்லை! Route not available. முந்தைய சரியான வழித்தடத்திற்கு மீட்டமைக்கப்பட்டது."
                     : "⚠️ Route does not connect to END pin! Route not available. Reverted to previous valid route.")
@@ -2808,6 +2764,9 @@ export default function App() {
         clearAlts();
         setRouteError(null);
 
+        if (map && !map.hasLayer(poly)) {
+          poly.addTo(map);
+        }
         poly.setLatLngs(latLngs);
         if (poly.setStyle) {
           poly.setStyle({
@@ -2868,6 +2827,16 @@ export default function App() {
         lastValidDistanceRef.current = distKm;
         lastValidDurationRef.current = durMin;
 
+        // Fit map bounds in Step 1 so even long routes (e.g. Karur to Trichy) show completely
+        if (mapStepRef.current === 1 && !hasIntermediate && map && poly.getBounds) {
+          try {
+            const bounds = poly.getBounds();
+            if (bounds && bounds.isValid()) {
+              map.fitBounds(bounds, { padding: [70, 70], maxZoom: 16, animate: true });
+            }
+          } catch (e) {}
+        }
+
         // Draw alternative routes if they exist (only for 2 points without intermediate waypoints)
         const L = (window as any).L;
         if (L && map && data.routes.length > 1 && !hasIntermediate) {
@@ -2909,6 +2878,11 @@ export default function App() {
         return true;
       } else {
         // No connected route between points!
+        if (mapStepRef.current === 1 && !hasIntermediate) {
+          handleStep1ToughRoute();
+          return false;
+        }
+
         clearAlts();
         setRouteError("Route not available");
         triggerToast(language === "ta"
@@ -2953,6 +2927,15 @@ export default function App() {
       }
     } catch (error) {
       console.warn("OSRM routing service failed or no route:", error);
+      const hadIntermediate = Array.isArray(stopsOrWaypoint)
+        ? stopsOrWaypoint.length > 0
+        : Boolean(stopsOrWaypoint || (mapStepRef.current === 2 && pinCStopsRef.current?.length));
+
+      if (mapStepRef.current === 1 && !hadIntermediate) {
+        handleStep1ToughRoute();
+        return false;
+      }
+
       clearAlts();
       setRouteError("Route not available");
       if (lastValidRouteLatLngsRef.current && lastValidRouteLatLngsRef.current.length > 0) {
@@ -3014,12 +2997,15 @@ export default function App() {
 
         try {
           // Centered around Pin A coordinate
+          const initialCenter = (mapModeRef.current === "single" && pinCStopsRef.current[0])
+            ? [pinCStopsRef.current[0].lat, pinCStopsRef.current[0].lng]
+            : [pinALatLng.lat, pinALatLng.lng];
           const mapInstance = L.map("reactMapPicker", {
             zoomControl: false, // Disable default to prevent search bar overlap
             scrollWheelZoom: true,
             minZoom: 4,
             maxZoom: 22
-          }).setView([pinALatLng.lat, pinALatLng.lng], 10);
+          }).setView(initialCenter, mapModeRef.current === "single" ? 13 : 10);
 
           const tileUrl = isSatelliteMode 
             ? "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}" 
@@ -3089,8 +3075,8 @@ export default function App() {
             icon: iconB
           }).bindTooltip("📍 End Location", { permanent: false });
 
-          // Connecting Polyline styled like a modern driving route
-          const polyInstance = L.polyline([[pinALatLng.lat, pinALatLng.lng], [pinBLatLng.lat, pinBLatLng.lng]], {
+          // Connecting Polyline styled like a modern driving route (empty until OSRM resolves real road path)
+          const polyInstance = L.polyline([], {
             color: "#3b82f6", // Vibrant modern blue for streets
             weight: 12, // Professional route line density - slightly wider for easier clicking
             opacity: 0.85,
@@ -3183,16 +3169,18 @@ export default function App() {
             }
           });
 
-          // Add only if they are actually set!
-          if (pinASetRef.current) {
-            markerA.addTo(mapInstance);
-          }
-          if (pinBSetRef.current) {
-            markerB.addTo(mapInstance);
-          }
-          if (pinASetRef.current && pinBSetRef.current) {
-            polyInstance.addTo(mapInstance);
-            fetchOSRMRoute(pinALatLng, pinBLatLng, polyInstance, undefined, mapInstance);
+          // Add only if they are actually set and not in single-pin mode!
+          if (mapModeRef.current !== "single") {
+            if (pinASetRef.current) {
+              markerA.addTo(mapInstance);
+            }
+            if (pinBSetRef.current) {
+              markerB.addTo(mapInstance);
+            }
+            if (pinASetRef.current && pinBSetRef.current) {
+              polyInstance.addTo(mapInstance);
+              fetchOSRMRoute(pinALatLng, pinBLatLng, polyInstance, undefined, mapInstance);
+            }
           }
 
           // Setup direct click handling for marker click to check if the close button was clicked!
@@ -3253,41 +3241,67 @@ export default function App() {
           mapInstance.on("click", (e: any) => {
             if (!canEditStops) return;
             const clickPos = e.latlng;
+
+            if (mapModeRef.current === "single") {
+              const existingStop = pinCStopsRef.current[0];
+              const nextStop = {
+                lat: clickPos.lat,
+                lng: clickPos.lng,
+                busName: existingStop?.busName || "",
+                departureTime: existingStop?.departureTime || "08:30 AM",
+                crowdLevel: (existingStop?.crowdLevel || "Medium") as "Low" | "Medium" | "High"
+              };
+              setPinCStops([nextStop]);
+              pinCStopsRef.current = [nextStop];
+              setBusStopLatLng({ lat: clickPos.lat, lng: clickPos.lng });
+              setBusPinSet(true);
+              setActiveStopPopupIdx(0);
+              syncStopsToRegistry([nextStop]);
+              triggerToast(language === "ta"
+                ? "📍 பேருந்து நிறுத்தம் 1 (Bus Stop 1) குறிக்கப்பட்டது!"
+                : "📍 Bus Stop 1 pinned! Fill Bus Name, Timing & Crowd Level."
+              );
+              return;
+            }
             
             if (mapStepRef.current === 1) {
+              setRouteError(null);
               if (!pinASetRef.current) {
                 // First click drops a 'Start' pin
                 markerA.setLatLng(clickPos);
                 setPinALatLng({ lat: clickPos.lat, lng: clickPos.lng });
                 setPinASet(true);
+                pinASetRef.current = true;
                 setActivePinSelector("B");
+                activePinSelectorRef.current = "B";
                 triggerToast("🔵 Start Location set! Now click on the map to place End Location.");
               } else if (!pinBSetRef.current) {
                 // Second click drops an 'End' pin
                 markerB.setLatLng(clickPos);
                 setPinBLatLng({ lat: clickPos.lat, lng: clickPos.lng });
                 setPinBSet(true);
+                pinBSetRef.current = true;
                 triggerToast("🟡 End Location set! Actual road-based route is calculating...");
               } else {
                 if (activePinSelectorRef.current === "A") {
                   markerA.setLatLng(clickPos);
                   setPinALatLng({ lat: clickPos.lat, lng: clickPos.lng });
                   setPinASet(true);
+                  pinASetRef.current = true;
                 } else {
                   markerB.setLatLng(clickPos);
                   setPinBLatLng({ lat: clickPos.lat, lng: clickPos.lng });
                   setPinBSet(true);
+                  pinBSetRef.current = true;
                 }
               }
 
               // Re-fetch road route starting from updated positions
-              setTimeout(() => {
-                if (pinASetRef.current && pinBSetRef.current) {
-                  const pA = markerA.getLatLng();
-                  const pB = markerB.getLatLng();
-                  fetchOSRMRoute(pA, pB, polyInstance);
-                }
-              }, 50);
+              if (pinASetRef.current && pinBSetRef.current) {
+                const pA = markerA.getLatLng();
+                const pB = markerB.getLatLng();
+                fetchOSRMRoute(pA, pB, polyInstance, undefined, mapInstance);
+              }
             }
           });
 
@@ -3359,6 +3373,11 @@ export default function App() {
       setPickerWaypointMarkerInstance(null);
       setWaypointLatLng(null);
       lastValidWaypointLatLngRef.current = null;
+      lastValidRouteLatLngsRef.current = null;
+      lastValidStopsRef.current = [];
+      lastValidDistanceRef.current = null;
+      lastValidDurationRef.current = null;
+      setRouteError(null);
       setPinCStops([]);
 
       // Clear any Pin C markers
@@ -3399,6 +3418,7 @@ export default function App() {
 
   // Dynamically update Start and End icons to hide or show close mark '✕' based on mapStep and canEditStops
   useEffect(() => {
+    if (mapModeRef.current === "single") return;
     if (pickerMarkerInstance && pickerMarkerBInstance) {
       const L = (window as any).L;
       if (!L) return;
@@ -3583,7 +3603,7 @@ export default function App() {
             </div>
 
             <div class="space-y-1" style="overflow: visible;">
-              <label class="block text-[10px] uppercase font-black tracking-wider text-neutral-400">Departure Time</label>
+              <label class="block text-[10px] uppercase font-black tracking-wider text-neutral-400">${mapModeRef.current === "single" ? "Bus Timing" : "Departure Time"}</label>
               <div class="flex items-center gap-2" style="overflow: visible;">
                 <div class="flex items-center gap-1.5 flex-1 min-w-0" style="overflow: visible;">
                   <input 
@@ -3734,6 +3754,14 @@ export default function App() {
               setBusStopLatLng({ lat: pos.lat, lng: pos.lng });
             }
 
+            if (mapModeRef.current === "single") {
+              triggerToast(language === "ta"
+                ? "📍 பேருந்து நிறுத்தம் 1 இடம் புதுப்பிக்கப்பட்டது!"
+                : "📍 Bus Stop 1 location updated!"
+              );
+              return;
+            }
+
             // Recalculate road route linking Start -> all Bus Stops -> End
             const success = await fetchOSRMRoute(
               pinALatLng,
@@ -3770,7 +3798,9 @@ export default function App() {
               setBusPinSet(false);
               setActiveStopPopupIdx(null);
             }
-            fetchOSRMRoute(pinALatLng, pinBLatLng, pickerPolylineInstance, updated, pickerMapInstance);
+            if (mapModeRef.current !== "single") {
+              fetchOSRMRoute(pinALatLng, pinBLatLng, pickerPolylineInstance, updated, pickerMapInstance);
+            }
             triggerToast(`✕ Removed Bus Stop ${idx + 1}`);
           } else {
             setActiveStopPopupIdx(idx);
@@ -3806,6 +3836,9 @@ export default function App() {
   useEffect(() => {
     if (pickerMapInstance) {
       if (mapStep === 2) {
+        if (mapModeRef.current === "single") {
+          return;
+        }
         // Calculate midpoint of A and B to place the BUS pin
         const midLat = (pinALatLng.lat + pinBLatLng.lat) / 2;
         const midLng = (pinALatLng.lng + pinBLatLng.lng) / 2;
@@ -3870,97 +3903,17 @@ export default function App() {
   };
 
   const toggleMobileMenu = () => {
-    const nextMenuState = !isMobileMenuOpenRef.current;
-    isMobileMenuOpenRef.current = nextMenuState;
-    setIsMobileMenuOpen(nextMenuState);
-  };
-
-  const resetExitConfirmation = () => {
-    exitConfirmationDeadlineRef.current = 0;
-    if (exitConfirmationTimerRef.current !== null) {
-      clearTimeout(exitConfirmationTimerRef.current);
-      exitConfirmationTimerRef.current = null;
-    }
-    setShowExitConfirmation(false);
+    setIsMobileMenuOpen(!isMobileMenuOpen);
   };
 
   const navigateToTab = (tab: "view" | "add" | "owner" | "about" | "settings" | "login" | "wishlist") => {
-    resetExitConfirmation();
-    activeTabRef.current = tab;
     setActiveTab(tab);
     setSelectedStopId(null);
-    isMobileMenuOpenRef.current = false;
     setIsMobileMenuOpen(false);
     try {
       window.location.hash = tab;
     } catch (e) {}
   };
-
-  useEffect(() => {
-    if (Capacitor.getPlatform() !== "android") return;
-
-    let disposed = false;
-    let backButtonListener: PluginListenerHandle | null = null;
-
-    const handleBackButton = async () => {
-      if (isMobileMenuOpenRef.current) {
-        isMobileMenuOpenRef.current = false;
-        setIsMobileMenuOpen(false);
-        resetExitConfirmation();
-        return;
-      }
-
-      if (activeTabRef.current !== "view") {
-        navigateToTab("view");
-        return;
-      }
-
-      if (Date.now() < exitConfirmationDeadlineRef.current) {
-        resetExitConfirmation();
-        try {
-          await CapacitorApp.exitApp();
-        } catch (error) {
-          console.error("Failed to exit the app:", error);
-        }
-        return;
-      }
-
-      resetExitConfirmation();
-      exitConfirmationDeadlineRef.current = Date.now() + 2000;
-      setShowExitConfirmation(true);
-      exitConfirmationTimerRef.current = setTimeout(() => {
-        resetExitConfirmation();
-      }, 2000);
-    };
-
-    const registerBackButtonListener = async () => {
-      const listener = await CapacitorApp.addListener("backButton", handleBackButton);
-      if (disposed) {
-        await listener.remove();
-      } else {
-        backButtonListener = listener;
-      }
-    };
-
-    void registerBackButtonListener().catch((error) => {
-      console.error("Failed to register the Android back button listener:", error);
-    });
-
-    return () => {
-      disposed = true;
-      if (backButtonListener) {
-        void backButtonListener.remove().catch((error) => {
-          console.error("Failed to remove the Android back button listener:", error);
-        });
-        backButtonListener = null;
-      }
-      if (exitConfirmationTimerRef.current !== null) {
-        clearTimeout(exitConfirmationTimerRef.current);
-        exitConfirmationTimerRef.current = null;
-      }
-      exitConfirmationDeadlineRef.current = 0;
-    };
-  }, []);
 
   // --- BUS REGISTRY CONTROLLING ACTIONS ---
   
@@ -3984,16 +3937,6 @@ export default function App() {
       return;
     }
 
-    // 2. Mandatory Confirmation: (Start and End Route) OR (Bus Stop City Name)
-    const hasStartAndEnd = Boolean(startRoute?.trim() && endRoute?.trim());
-    const hasCityRoute = Boolean(cityRoute?.trim());
-    if (!hasStartAndEnd && !hasCityRoute) {
-      triggerToast(language === "ta"
-        ? "❗ 'தொடக்கம் & முடிவு வழி' அல்லது 'பேருந்து நிறுத்த நகரம்' இரண்டில் ஒன்றை கட்டாயம் உள்ளிடவும்!"
-        : "❗ Please provide either 'Start to End Route' OR 'Bus Stop City Name'!");
-      return;
-    }
-
     // 3. Mandatory Confirmation: Active Days
     if (!activeDays?.trim()) {
       triggerToast(language === "ta"
@@ -4002,11 +3945,11 @@ export default function App() {
       return;
     }
 
-    // 4. Mandatory Confirmation: Excluded Days
+    // 4. Mandatory Confirmation: Leave Days
     if (!excludedDays?.trim()) {
       triggerToast(language === "ta"
-        ? "❗ தவிர்க்கப்பட்ட நாட்களைக் (Excluded Days) கட்டாயம் உள்ளிடவும் (அல்லது 'இல்லை / None' எனத் தேர்ந்தெடுக்கவும்)!"
-        : "❗ Please specify Excluded Days (or choose 'None' if operating daily)!");
+        ? "❗ விடுமுறை நாட்களைக் (Leave Days) கட்டாயம் உள்ளிடவும் (அல்லது 'இல்லை / None' எனத் தேர்ந்தெடுக்கவும்)!"
+        : "❗ Please specify Leave Days (or choose 'None' if operating daily)!");
       return;
     }
 
@@ -4285,11 +4228,11 @@ export default function App() {
 
       // Also clean up from wishlist if present
       try {
-        const starRaw = localStorage.getItem("starred_stops");
+        const starRaw = localStorage.getItem("starred_stops_v1");
         if (starRaw) {
           const stars: string[] = JSON.parse(starRaw);
           const nextStars = stars.filter(sId => sId !== id);
-          localStorage.setItem("starred_stops", JSON.stringify(nextStars));
+          localStorage.setItem("starred_stops_v1", JSON.stringify(nextStars));
           setStarredStops(nextStars);
         }
       } catch (e) {}
@@ -4472,6 +4415,12 @@ export default function App() {
   // Keep Leaflet map layer visibility in sync with pinASet / pinBSet states
   useEffect(() => {
     if (pickerMapInstance) {
+      if (mapModeRef.current === "single") {
+        if (pickerMarkerInstance) pickerMarkerInstance.remove();
+        if (pickerMarkerBInstance) pickerMarkerBInstance.remove();
+        if (pickerPolylineInstance) pickerPolylineInstance.remove();
+        return;
+      }
       if (pickerMarkerInstance) {
         if (pinASet) {
           if (!pickerMapInstance.hasLayer(pickerMarkerInstance)) {
@@ -4555,7 +4504,7 @@ export default function App() {
       });
 
     // Deduplicate locals and show them instantly
-    const uniqueLocals = Array.from(new Map(locals.map(item => [item.display_name, item])).values()) as any[];
+    const uniqueLocals = Array.from((new (window as any).Map(locals.map(item => [item.display_name, item])) as any).values()) as any[];
     setMapSearchSuggestions(uniqueLocals.slice(0, 4));
 
     // Clear previous scheduled API geocode fetches to debounce fast typing
@@ -4614,7 +4563,7 @@ export default function App() {
           }
 
           const combined = [...uniqueLocals, ...apiResults];
-          const uniqueCombined = Array.from(new Map(combined.map(item => [item.display_name, item])).values()) as any[];
+          const uniqueCombined = Array.from((new (window as any).Map(combined.map(item => [item.display_name, item])) as any).values()) as any[];
           setMapSearchSuggestions(uniqueCombined.slice(0, 10));
         } catch (err) {
           console.warn("Geocoding service fetch failed:", err);
@@ -4634,6 +4583,25 @@ export default function App() {
       const newLatLng = new L.LatLng(item.lat, item.lon || item.lng);
       pickerMapInstance.setView(newLatLng, 17); // Deep zoom in as requested!
       
+      if (mapModeRef.current === "single") {
+        const existingStop = pinCStopsRef.current[0];
+        const nextStop = {
+          lat: item.lat,
+          lng: item.lon || item.lng,
+          busName: existingStop?.busName || "",
+          departureTime: existingStop?.departureTime || "08:30 AM",
+          crowdLevel: (existingStop?.crowdLevel || "Medium") as "Low" | "Medium" | "High"
+        };
+        setPinCStops([nextStop]);
+        pinCStopsRef.current = [nextStop];
+        setBusStopLatLng({ lat: nextStop.lat, lng: nextStop.lng });
+        setBusPinSet(true);
+        setActiveStopPopupIdx(0);
+        syncStopsToRegistry([nextStop]);
+        triggerToast(language === "ta" ? "📍 பேருந்து நிறுத்தம் 1 தேடலில் இருந்து குறிக்கப்பட்டது!" : "📍 Bus Stop 1 pinned from search!");
+        return;
+      }
+
       if (mapStep === 2 || activePinSelector === "BUS") {
         const rawStop = { lat: item.lat, lng: item.lon || item.lng };
         const snappedStop = snapToRoute(rawStop);
@@ -4644,27 +4612,41 @@ export default function App() {
         });
         setBusStopLatLng(snappedStop);
         setBusPinSet(true);
+        if (pickerPolylineInstance && pickerMarkerInstance && pickerMarkerBInstance) {
+          const pA = pickerMarkerInstance.getLatLng();
+          const pB = pickerMarkerBInstance.getLatLng();
+          fetchOSRMRoute(pA, pB, pickerPolylineInstance, undefined, pickerMapInstance);
+        }
       } else if (activePinSelector === "A") {
+        setRouteError(null);
         if (pickerMarkerInstance) {
           pickerMarkerInstance.setLatLng(newLatLng);
         }
         setPinALatLng({ lat: item.lat, lng: item.lon || item.lng });
         setPinASet(true);
+        pinASetRef.current = true;
+        if (!pinBSetRef.current) {
+          setActivePinSelector("B");
+          activePinSelectorRef.current = "B";
+          triggerToast("🔵 Start Location set! Now search or tap map to place End Location.");
+        } else if (pickerPolylineInstance && pickerMarkerBInstance) {
+          const pB = pickerMarkerBInstance.getLatLng();
+          fetchOSRMRoute(newLatLng, pB, pickerPolylineInstance, undefined, pickerMapInstance);
+        }
       } else {
+        setRouteError(null);
         if (pickerMarkerBInstance) {
           pickerMarkerBInstance.setLatLng(newLatLng);
         }
         setPinBLatLng({ lat: item.lat, lng: item.lon || item.lng });
         setPinBSet(true);
-      }
-
-      // Sync polyline with road route when selected from search terms
-      if (pickerPolylineInstance && pickerMarkerInstance && pickerMarkerBInstance) {
-        setTimeout(() => {
+        pinBSetRef.current = true;
+        if (pinASetRef.current && pickerPolylineInstance && pickerMarkerInstance) {
           const pA = pickerMarkerInstance.getLatLng();
-          const pB = pickerMarkerBInstance.getLatLng();
-          fetchOSRMRoute(pA, pB, pickerPolylineInstance);
-        }, 30);
+          fetchOSRMRoute(pA, newLatLng, pickerPolylineInstance, undefined, pickerMapInstance);
+        } else {
+          triggerToast("🟡 End Location set! Now search or tap map to place Start Location.");
+        }
       }
     }
   };
@@ -4853,16 +4835,47 @@ export default function App() {
   };
 
   const handleSaveMapCoordinates = () => {
-    if (routeError) {
+    if (mapModeRef.current !== "single" && routeError) {
       triggerToast(language === "ta"
         ? "⚠️ வழித்தடம் கிடைக்கவில்லை (No Route Available)! பேருந்து நிறுத்தத்தை சரியான பாதையில் வைக்கவும்."
         : "⚠️ No Route Available! Please drag the bus stop onto a connecting road before saving.");
       return;
     }
 
-    if (pinCStops.length > 0) {
+    let stopsToSave = [...pinCStops];
+    if (stopsToSave.length > 0) {
+      stopsToSave = stopsToSave.map((stop, idx) => {
+        const nameEl = document.getElementById(`popup_bus_name_${idx}`) as HTMLInputElement | null;
+        const hhEl = document.getElementById(`popup_time_hh_${idx}`) as HTMLInputElement | null;
+        const mmEl = document.getElementById(`popup_time_mm_${idx}`) as HTMLInputElement | null;
+        const ampmEl = document.getElementById(`popup_ampm_val_${idx}`);
+        const crowdEl = document.getElementById(`popup_crowd_${idx}`) as HTMLSelectElement | null;
+        if (nameEl || hhEl || mmEl || crowdEl) {
+          let hhNum = hhEl ? parseInt(hhEl.value.replace(/\D/g, ""), 10) : NaN;
+          if (isNaN(hhNum) || hhNum < 1 || hhNum > 12) hhNum = 8;
+          let mmNum = mmEl ? parseInt(mmEl.value.replace(/\D/g, ""), 10) : NaN;
+          if (isNaN(mmNum) || mmNum < 0 || mmNum > 59) mmNum = 30;
+          const ampmVal = ampmEl ? ampmEl.innerText.trim() : "AM";
+          const departureTime = (hhEl && mmEl)
+            ? `${String(hhNum).padStart(2, "0")}:${String(mmNum).padStart(2, "0")} ${ampmVal}`
+            : (stop.departureTime || "08:30 AM");
+          return {
+            ...stop,
+            busName: nameEl ? nameEl.value.trim() : (stop.busName || ""),
+            departureTime,
+            crowdLevel: (crowdEl ? crowdEl.value : (stop.crowdLevel || "Medium")) as "Low" | "Medium" | "High"
+          };
+        }
+        return stop;
+      });
+      setPinCStops(stopsToSave);
+      pinCStopsRef.current = stopsToSave;
+      syncStopsToRegistry(stopsToSave);
+    }
+
+    if (stopsToSave.length > 0) {
       // Validate that every bus stop on the route has Bus Name / Number filled
-      const missingIndex = pinCStops.findIndex(p => !p.busName || !p.busName.trim());
+      const missingIndex = stopsToSave.findIndex(p => !p.busName || !p.busName.trim());
       if (missingIndex !== -1) {
         setActiveStopPopupIdx(missingIndex);
         triggerToast(language === "ta"
@@ -4876,7 +4889,7 @@ export default function App() {
         return;
       }
 
-      const coordStr = pinCStops.map((p, i) => {
+      const coordStr = stopsToSave.map((p, i) => {
         let label = `Bus Stop ${i+1}: ${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}`;
         if (p.busName) label += ` (${p.busName})`;
         if (p.departureTime) label += ` [Dep: ${p.departureTime}]`;
@@ -4887,7 +4900,7 @@ export default function App() {
         gps: coordStr 
       }));
       setGpsStatus("pinned");
-      triggerToast(`✅ Attached ${pinCStops.length} Bus Stop coordinates successfully!`);
+      triggerToast(`✅ Attached ${stopsToSave.length} Bus Stop coordinates successfully!`);
     } else if (busStopLatLng) {
       const coordStr = `${busStopLatLng.lat.toFixed(6)}, ${busStopLatLng.lng.toFixed(6)}`;
       setFormData(prev => ({ 
@@ -5127,21 +5140,8 @@ export default function App() {
     }
     
     try {
-      let user;
-      if (Capacitor.isNativePlatform()) {
-        const nativeResult = await FirebaseAuthentication.signInWithGoogle();
-        const idToken = nativeResult.credential?.idToken;
-        if (!idToken) {
-          throw new Error("Google sign-in did not return an ID token.");
-        }
-        const credential = GoogleAuthProvider.credential(idToken);
-        const result = await signInWithCredential(auth, credential);
-        user = result.user;
-      } else {
-        const result = await signInWithPopup(auth, googleProvider);
-        user = result.user;
-      }
-
+      const result = await signInWithPopup(auth, googleProvider);
+      const user = result.user;
       const sess: UserSession = {
         uid: user.uid,
         username: user.email?.split("@")[0] || "google_user",
@@ -5194,23 +5194,17 @@ export default function App() {
 
 
   const handleLogout = async () => {
-    try {
-      if (Capacitor.isNativePlatform()) {
-        await FirebaseAuthentication.signOut();
-      }
-      if (firebaseInitialized && auth) {
+    if (firebaseInitialized && auth) {
+      try {
         await signOut(auth);
+      } catch (e) {
+        console.warn("Firebase signout error", e);
       }
-    } catch (error) {
-      console.error("Firebase signout failed:", error);
-      triggerToast("❗ Could not sign out. Please try again.");
-      return;
     }
-
     setUserSession(null);
     localStorage.removeItem("busStopSess_v1");
     triggerToast("🚪 Logged out successfully. See you again!");
-    navigateToTab("login");
+    setActiveTab("view");
   };
 
   // --- SEARCH AND FILTER FILTERING PIPELINES ---
@@ -5235,7 +5229,6 @@ export default function App() {
         ? "bg-[#090b0f] text-[#f0ede8]" 
         : "bg-[#f4f6fa] text-[#090b0f]"
     }`}>
-      <BusLoader isLoading={isInitialLoading || !isAuthInitialized} message="Finding bus stops..." />
       
       {/* ── TOAST NOTIFICATIONS ── */}
       {showToast && (
@@ -5245,47 +5238,27 @@ export default function App() {
         </div>
       )}
 
-      <div
-        role="status"
-        aria-live="polite"
-        aria-hidden={!showExitConfirmation}
-        className={`fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full border px-4 py-2 text-xs font-bold shadow-xl transition-all duration-300 ease-out ${
-          theme === "dark"
-            ? "border-brand-yellow bg-[#111322] text-[#f0ede8]"
-            : "border-brand-yellow bg-white text-[#090b0f]"
-        } ${
-          showExitConfirmation
-            ? "translate-y-0 opacity-100"
-            : "translate-y-3 opacity-0 pointer-events-none"
-        }`}
-      >
-        Press back again to exit
-      </div>
-
       {/* ── MOBILE HEADER (Visible only on touch layout phones) ── */}
-      <header className={`md:hidden flex items-center justify-between px-3 min-[375px]:px-5 py-3 border-b z-40 sticky top-0 backdrop-blur-md ${
+      <header className={`md:hidden flex items-center justify-between px-5 py-4 border-b z-40 sticky top-0 backdrop-blur-md ${
         theme === "dark" 
           ? "bg-[#0d0f18]/90 border-[#1c1f33]/85" 
           : "bg-white/90 border-[#ced0d4]/80"
       }`}>
-        <div className="flex items-center gap-2 min-[375px]:gap-3 cursor-pointer" onClick={() => navigateToTab("view")}>
-          <img 
-            src="/user-stop-logo.webp" 
-            alt="User Stop" 
-            className="w-11 h-11 min-[375px]:w-12 min-[375px]:h-12 rounded-xl shadow-md object-contain"
-            loading="eager"
-          />
+        <div className="flex items-center gap-3" onClick={() => navigateToTab("view")}>
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-yellow to-orange-500 flex items-center justify-center text-black font-extrabold text-xl shadow-md">
+            🚌
+          </div>
           <div>
-            <h1 className="font-display font-extrabold text-[10px] min-[375px]:text-xs tracking-normal min-[375px]:tracking-wider leading-none text-brand-yellow whitespace-nowrap">USER STOP</h1>
+            <h1 className="font-display font-extrabold text-xs tracking-wider leading-none text-brand-yellow">USER STOP</h1>
           </div>
         </div>
 
-        <div className="flex items-center gap-1 min-[375px]:gap-2">
+        <div className="flex items-center gap-2">
           {/* Notification Bell Icon */}
           <button
             type="button"
             onClick={() => setIsNotificationOpen(!isNotificationOpen)}
-            className={`relative p-1.5 min-[375px]:p-2 rounded-xl border text-sm transition-all active:scale-95 cursor-pointer ${
+            className={`relative p-2 rounded-xl border text-sm transition-all active:scale-95 cursor-pointer ${
               theme === "dark" ? "border-[#2e3150] bg-[#1a1d27]" : "border-[#ced0d4] bg-white"
             }`}
             aria-label="Notifications"
@@ -5302,7 +5275,7 @@ export default function App() {
           {/* Theme Switcher */}
           <button 
             onClick={toggleTheme} 
-            className={`p-1.5 min-[375px]:p-2 rounded-xl border text-sm transition-all active:scale-95 ${
+            className={`p-2 rounded-xl border text-sm transition-all active:scale-95 ${
               theme === "dark" ? "border-[#2e3150] bg-[#1a1d27]" : "border-[#ced0d4] bg-white"
             }`}
             aria-label="Toggle Theme"
@@ -5328,7 +5301,7 @@ export default function App() {
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => { if (!e.metaKey && !e.ctrlKey) e.preventDefault(); navigateToTab("login"); }} 
-              className={`p-1.5 min-[375px]:p-2 rounded-xl border transition-all active:scale-95 ${
+              className={`p-2 rounded-xl border transition-all active:scale-95 ${
                 theme === "dark" ? "border-[#2e3150] bg-[#1a1d27]" : "border-[#ced0d4] bg-white"
               }`}
             >
@@ -5339,7 +5312,7 @@ export default function App() {
           {/* Mobile hamburger menu */}
           <button 
             onClick={toggleMobileMenu} 
-            className={`p-1.5 min-[375px]:p-2 rounded-xl border transition-all active:scale-95 ${
+            className={`p-2 rounded-xl border transition-all active:scale-95 ${
               theme === "dark" ? "border-[#2e3150] bg-[#1a1d27]" : "border-[#ced0d4] bg-white"
             }`}
             aria-label="Open Menu"
@@ -5350,35 +5323,24 @@ export default function App() {
       </header>
 
       {/* ── MOBILE NAVIGATION PANEL (Sliding full layout drawer) ── */}
-      <div 
-        className={`fixed inset-0 z-40 md:hidden flex transition-opacity duration-300 ease-in-out ${
-          isMobileMenuOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
-        }`}
-        aria-hidden={!isMobileMenuOpen}
-      >
-        {/* Backdrop */}
-        <div 
-          onClick={toggleMobileMenu} 
-          className={`fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity duration-300 ease-in-out ${
-            isMobileMenuOpen ? "opacity-100" : "opacity-0"
-          }`}
-        />
+      {isMobileMenuOpen && (
+        <div className="fixed inset-0 z-40 md:hidden flex">
+          {/* Backdrop */}
+          <div 
+            onClick={toggleMobileMenu} 
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm"
+          />
 
-        {/* Drawer body */}
-        <div className={`relative w-[280px] max-w-[85vw] h-full flex flex-col p-6 z-40 transform transition-transform duration-300 ease-in-out will-change-transform overflow-y-auto ${
-          isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
-        } ${
-          theme === "dark" ? "bg-[#0f1117]" : "bg-white"
-        }`}>
+          {/* Drawer body */}
+          <div className={`relative w-[280px] max-w-[85vw] h-full flex flex-col p-6 z-40 transition-transform duration-300 overflow-y-auto ${
+            theme === "dark" ? "bg-[#0f1117]" : "bg-white"
+          }`}>
             <div className="flex items-center gap-3 mb-8">
-              <img 
-                src="/user-stop-logo.webp" 
-                alt="User Stop" 
-                className="w-11 h-11 rounded-xl shadow-lg object-contain"
-                loading="eager"
-              />
+              <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-brand-yellow to-orange-500 flex items-center justify-center text-black font-extrabold text-2xl shadow-lg">
+                🚌
+              </div>
               <div>
-                <h1 className="font-display font-extrabold text-sm tracking-wide">USER STOP</h1>
+                <h1 className="font-display font-extrabold text-sm tracking-wide">TN BUS STOP</h1>
                 <p className="text-[10px] text-brand-yellow font-extrabold uppercase mt-0.5">COMMUNITY REGISTRY</p>
               </div>
             </div>
@@ -5446,21 +5408,6 @@ export default function App() {
               </a>
 
               <a 
-                href="#about"
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => { if (!e.metaKey && !e.ctrlKey) e.preventDefault(); navigateToTab("about"); }} 
-                className={`w-full py-4 px-5 rounded-xl font-bold flex items-center gap-4 text-left transition-all ${
-                  activeTab === "about"
-                    ? "bg-brand-yellow-light text-black shadow-md shadow-amber-500/10"
-                    : theme === "dark" ? "text-[#7a7f96] hover:bg-[#1a1d27]" : "text-[#65676b] hover:bg-[#e4e6eb]"
-                }`}
-              >
-                <Info className="w-5 h-5" />
-                <span className="uppercase">{t("about_app")}</span>
-              </a>
-
-              <a 
                 href="#settings"
                 target="_blank"
                 rel="noopener noreferrer"
@@ -5514,6 +5461,7 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
 
       {/* ── DESKTOP PERMANENT SIDEBAR Layout ── */}
       <aside className={`hidden md:flex flex-col py-8 px-6 border-r flex-shrink-0 transition-all duration-300 z-30 sticky top-0 h-screen overflow-y-auto ${
@@ -5525,13 +5473,9 @@ export default function App() {
       }`}>
         {/* LOGO */}
         <div className={`flex items-center gap-4 mb-10 ${isSidebarCollapsed ? "justify-center" : ""}`}>
-          <img 
-            src="/user-stop-logo.webp" 
-            alt="User Stop" 
-            className="w-12 h-12 rounded-xl shadow-md cursor-pointer hover:rotate-6 transition-transform object-contain"
-            onClick={toggleSidebar}
-            loading="eager"
-          />
+          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-brand-yellow to-orange-500 flex items-center justify-center text-black font-extrabold text-2xl shadow-md cursor-pointer hover:rotate-6 transition-transform" onClick={toggleSidebar}>
+            🚌
+          </div>
           {!isSidebarCollapsed && (
             <div>
               <h1 className="font-display font-extrabold text-md tracking-wider leading-none text-brand-yellow">USER STOP</h1>
@@ -5611,24 +5555,6 @@ export default function App() {
           >
             <Star className="w-5 h-5 flex-shrink-0" />
             {!isSidebarCollapsed && <span className="tracking-wide">{t("wishlist")}</span>}
-          </a>
-
-          <a 
-            href="#about"
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => { if (!e.metaKey && !e.ctrlKey) e.preventDefault(); navigateToTab("about"); }} 
-            className={`w-full py-4 rounded-2xl font-bold flex items-center gap-4 text-left transition-all ${
-              isSidebarCollapsed ? "justify-center px-0" : "px-5"
-            } ${
-              activeTab === "about"
-                ? "bg-brand-yellow-light text-black shadow-xl shadow-amber-500/10"
-                : theme === "dark" ? "text-[#7a7f96] hover:bg-[#151a26]" : "text-[#65676b] hover:bg-[#e4e6eb]"
-            }`}
-            title="About App"
-          >
-            <Info className="w-5 h-5 flex-shrink-0" />
-            {!isSidebarCollapsed && <span className="tracking-wide">{t("about_app")}</span>}
           </a>
 
           <a 
@@ -5775,12 +5701,7 @@ export default function App() {
                 return (
                   <div className="text-center py-12">
                     <p className="text-[#7a7f96]">{t("detail_missing")}</p>
-                    <button 
-                      onClick={() => setSelectedStopId(null)} 
-                      className="mt-4 px-4 py-2 bg-brand-yellow hover:bg-brand-yellow/90 text-black font-bold text-xs rounded-xl cursor-pointer transition-all"
-                    >
-                      {t("back_to_board")}
-                    </button>
+                    <button onClick={() => setSelectedStopId(null)} className="mt-4 px-4 py-2 bg-brand-yellow text-black font-bold rounded-lg"></button>
                   </div>
                 );
               }
@@ -5933,7 +5854,7 @@ export default function App() {
                           {item.excludedDays && (
                             <div className="border-t sm:border-t-0 sm:border-l border-neutral-800/10 sm:pl-4 pt-2 sm:pt-0">
                               <span className="text-[11px] text-[#7a7f96] font-bold uppercase tracking-wider block">
-                                {language === "ta" ? "தவிர்க்கப்பட்ட நாட்கள்:" : "Excluded Days:"}
+                                {language === "ta" ? "விடுமுறை நாட்கள் (Leave Days):" : "Leave Days:"}
                               </span>
                               <span className="font-extrabold text-red-400 text-sm">
                                 {item.excludedDays}
@@ -6003,21 +5924,29 @@ export default function App() {
                             };
 
                             const parsedStops = parseGPS(item.gps);
+                            const isSingleStopPreview = parsedStops.length === 1 && (!item.startRoute || !item.endRoute);
+                            setMapMode(isSingleStopPreview ? "single" : "route");
+                            mapModeRef.current = isSingleStopPreview ? "single" : "route";
                             if (parsedStops.length > 0) {
-                              setPinCStops(parsedStops);
+                              const resolvedCrowd = (item.route?.includes("High") ? "High" : item.route?.includes("Low") ? "Low" : "Medium") as "Low" | "Medium" | "High";
+                              const enrichedStops = parsedStops.map(s => ({ ...s, crowdLevel: resolvedCrowd }));
+                              setPinCStops(enrichedStops);
+                              pinCStopsRef.current = enrichedStops;
                               setMapStep(2); // Instantly show bus stops step
                               
-                              const firstStop = parsedStops[0];
+                              const firstStop = enrichedStops[0];
                               setPinALatLng({ lat: firstStop.lat, lng: firstStop.lng });
-                              setPinASet(true);
+                              setPinASet(!isSingleStopPreview);
 
-                              if (parsedStops.length > 1) {
-                                const lastStop = parsedStops[parsedStops.length - 1];
+                              if (enrichedStops.length > 1) {
+                                const lastStop = enrichedStops[enrichedStops.length - 1];
                                 setPinBLatLng({ lat: lastStop.lat, lng: lastStop.lng });
                                 setPinBSet(true);
-                              } else {
+                              } else if (!isSingleStopPreview) {
                                 setPinBLatLng({ lat: firstStop.lat + 0.005, lng: firstStop.lng + 0.005 });
                                 setPinBSet(true);
+                              } else {
+                                setPinBSet(false);
                               }
                             }
                           }
@@ -6040,7 +5969,7 @@ export default function App() {
                         {/* Elegant overlay to capture clicks and prevent external redirects, while prompting the user */}
                         <div className="absolute inset-0 bg-black/0 hover:bg-black/30 transition-colors flex flex-col items-center justify-center">
                           <div className="bg-black/80 text-brand-yellow font-extrabold text-xs px-4 py-2 rounded-xl opacity-0 group-hover:opacity-100 transition-all transform scale-95 group-hover:scale-100 flex items-center gap-2 shadow-2xl border border-brand-yellow/30">
-                            <MapIcon className="w-4 h-4 animate-bounce text-brand-yellow" />
+                            <Map className="w-4 h-4 animate-bounce text-brand-yellow" />
                             <span>{language === "ta" ? "இன்-ஆப் வரைபடத்தில் காட்டு" : "VIEW ON CUSTOM IN-APP MAP"}</span>
                           </div>
                         </div>
@@ -6076,21 +6005,29 @@ export default function App() {
                             };
 
                             const parsedStops = parseGPS(item.gps);
+                            const isSingleStopPreview = parsedStops.length === 1 && (!item.startRoute || !item.endRoute);
+                            setMapMode(isSingleStopPreview ? "single" : "route");
+                            mapModeRef.current = isSingleStopPreview ? "single" : "route";
                             if (parsedStops.length > 0) {
-                              setPinCStops(parsedStops);
+                              const resolvedCrowd = (item.route?.includes("High") ? "High" : item.route?.includes("Low") ? "Low" : "Medium") as "Low" | "Medium" | "High";
+                              const enrichedStops = parsedStops.map(s => ({ ...s, crowdLevel: resolvedCrowd }));
+                              setPinCStops(enrichedStops);
+                              pinCStopsRef.current = enrichedStops;
                               setMapStep(2); // Instantly show bus stops step
                               
-                              const firstStop = parsedStops[0];
+                              const firstStop = enrichedStops[0];
                               setPinALatLng({ lat: firstStop.lat, lng: firstStop.lng });
-                              setPinASet(true);
+                              setPinASet(!isSingleStopPreview);
 
-                              if (parsedStops.length > 1) {
-                                const lastStop = parsedStops[parsedStops.length - 1];
+                              if (enrichedStops.length > 1) {
+                                const lastStop = enrichedStops[enrichedStops.length - 1];
                                 setPinBLatLng({ lat: lastStop.lat, lng: lastStop.lng });
                                 setPinBSet(true);
-                              } else {
+                              } else if (!isSingleStopPreview) {
                                 setPinBLatLng({ lat: firstStop.lat + 0.005, lng: firstStop.lng + 0.005 });
                                 setPinBSet(true);
+                              } else {
+                                setPinBSet(false);
                               }
                             }
                           }
@@ -6099,7 +6036,7 @@ export default function App() {
                         }}
                         className="mt-3 w-full py-3.5 bg-brand-yellow hover:bg-brand-yellow/90 text-black font-extrabold text-sm rounded-xl flex items-center justify-center gap-2.5 shadow-md transition-all border-none outline-none cursor-pointer"
                       >
-                        <MapIcon className="w-4 h-4" />
+                        <Map className="w-4 h-4" />
                         <span>{language === "ta" ? "இன்-ஆப் மேப்பில் காட்டு / மையப்படுத்து" : "CENTER & HIGHLIGHT IN-APP MAP"}</span>
                       </button>
                     </div>
@@ -6739,161 +6676,6 @@ export default function App() {
 
 
 
-                  {/* Start to End Route Section */}
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-[#7a7f96] uppercase tracking-wider block">
-                      {t("route_start_end_lbl")}
-                    </label>
-                    <div className="flex items-center gap-2">
-                      {/* Start Route Input Box with Suggestions */}
-                      <div className="flex-1 relative">
-                        <input 
-                          type="text" 
-                          placeholder={t("route_start_placeholder")}
-                          className={`w-full p-2.5 pr-8 text-xs rounded-xl border outline-none font-semibold focus:border-brand-yellow focus:ring-1 focus:ring-brand-yellow/40 ${
-                            theme === "dark" 
-                              ? "bg-[#141622] border-neutral-800 text-white placeholder-white/25" 
-                              : "bg-neutral-50 border-neutral-200 text-[#090b0f] placeholder-neutral-450"
-                          }`}
-                          value={formData.startRoute || ""}
-                          onChange={(e) => setFormData(prev => ({ ...prev, startRoute: e.target.value }))}
-                          onFocus={() => setShowStartSuggestions(true)}
-                          onBlur={() => setTimeout(() => setShowStartSuggestions(false), 200)}
-                        />
-                        {isStartLoading && (
-                          <span className="absolute right-3 top-3.5 flex h-2 w-2">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-yellow opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-2 w-2 bg-brand-yellow"></span>
-                          </span>
-                        )}
-                        {showStartSuggestions && (
-                          <div className={`absolute left-0 right-0 mt-1 rounded-xl shadow-2xl border z-50 max-h-60 overflow-y-auto p-1.5 flex flex-col gap-1 ${
-                            theme === "dark" 
-                              ? "bg-[#141622] border-[#222436] text-white" 
-                              : "bg-white border-neutral-200 text-[#090b0f]"
-                          }`}>
-                            {startSuggestions.map((item, idx) => (
-                              <button
-                                key={idx}
-                                type="button"
-                                onMouseDown={(e) => {
-                                  e.preventDefault();
-                                  setFormData(prev => ({ ...prev, startRoute: item.name }));
-                                  setShowStartSuggestions(false);
-                                }}
-                                className={`w-full text-left p-2 rounded-lg text-xs transition-colors flex flex-col gap-0.5 select-none hover:bg-brand-yellow hover:text-black cursor-pointer`}
-                              >
-                                <span className="font-extrabold">{item.name}</span>
-                                <span className="text-[9px] opacity-75 truncate">{item.display_name}</span>
-                                {item.sub && (
-                                  <span className="text-[8px] opacity-60 font-mono italic">{item.sub}</span>
-                                )}
-                              </button>
-                            ))}
-                            {startSuggestions.length === 0 && (
-                              <div className="px-3 py-2 text-[10px] text-neutral-400 italic">
-                                No matching hub found
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Visual Centered Separator */}
-                      <span className="text-[#7a7f96] font-extrabold text-sm select-none px-0.5">—</span>
-
-                      {/* End Route Input Box with Suggestions */}
-                      <div className="flex-1 relative">
-                        <input 
-                          type="text" 
-                          placeholder={t("route_end_placeholder")}
-                          className={`w-full p-2.5 pr-8 text-xs rounded-xl border outline-none font-semibold focus:border-brand-yellow focus:ring-1 focus:ring-brand-yellow/40 ${
-                            theme === "dark" 
-                              ? "bg-[#141622] border-neutral-800 text-white placeholder-white/25" 
-                              : "bg-neutral-50 border-neutral-200 text-[#090b0f] placeholder-neutral-450"
-                          }`}
-                          value={formData.endRoute || ""}
-                          onChange={(e) => setFormData(prev => ({ ...prev, endRoute: e.target.value }))}
-                          onFocus={() => setShowEndSuggestions(true)}
-                          onBlur={() => setTimeout(() => setShowEndSuggestions(false), 200)}
-                        />
-                        {isEndLoading && (
-                          <span className="absolute right-3 top-3.5 flex h-2 w-2">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-yellow opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-2 w-2 bg-brand-yellow"></span>
-                          </span>
-                        )}
-                        {showEndSuggestions && (
-                          <div className={`absolute left-0 right-0 mt-1 rounded-xl shadow-2xl border z-50 max-h-60 overflow-y-auto p-1.5 flex flex-col gap-1 ${
-                            theme === "dark" 
-                              ? "bg-[#141622] border-[#222436] text-white" 
-                              : "bg-white border-neutral-200 text-[#090b0f]"
-                          }`}>
-                            {endSuggestions.map((item, idx) => (
-                              <button
-                                key={idx}
-                                type="button"
-                                onMouseDown={(e) => {
-                                  e.preventDefault();
-                                  setFormData(prev => ({ ...prev, endRoute: item.name }));
-                                  setShowEndSuggestions(false);
-                                }}
-                                className={`w-full text-left p-2 rounded-lg text-xs transition-colors flex flex-col gap-0.5 select-none hover:bg-brand-yellow hover:text-black cursor-pointer`}
-                              >
-                                <span className="font-extrabold">{item.name}</span>
-                                <span className="text-[9px] opacity-75 truncate">{item.display_name}</span>
-                                {item.sub && (
-                                  <span className="text-[8px] opacity-60 font-mono italic">{item.sub}</span>
-                                )}
-                              </button>
-                            ))}
-                            {endSuggestions.length === 0 && (
-                              <div className="px-3 py-2 text-[10px] text-neutral-400 italic">
-                                No matching hub found
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* OR Divider and Bus Stop City Route */}
-                    <div className="space-y-3 pt-2 pb-1">
-                      <div className="relative flex items-center justify-center my-1.5">
-                        <div className="border-t border-neutral-700/60 w-full absolute"></div>
-                        <span className={`relative px-3 py-0.5 text-[10px] font-extrabold uppercase tracking-widest rounded-full border shadow-sm ${
-                          theme === "dark" 
-                            ? "bg-[#0b0d16] text-[#7a7f96] border-neutral-800" 
-                            : "bg-white text-neutral-500 border-neutral-200"
-                        }`}>
-                          {t("route_or_divider")}
-                        </span>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-[#7a7f96] uppercase tracking-wider block">
-                          {t("bus_stop_city_lbl")}
-                        </label>
-                        <div className="relative">
-                          <MapPin className="w-3.5 h-3.5 text-brand-yellow/70 absolute left-3 top-3" />
-                          <input
-                            type="text"
-                            placeholder={t("bus_stop_city_placeholder")}
-                            className={`w-full p-2.5 pl-9 text-xs rounded-xl border outline-none font-semibold focus:border-brand-yellow focus:ring-1 focus:ring-brand-yellow/40 ${
-                              theme === "dark"
-                                ? "bg-[#141622] border-neutral-800 text-white placeholder-white/25"
-                                : "bg-neutral-50 border-neutral-200 text-[#090b0f] placeholder-neutral-450"
-                            }`}
-                            value={formData.cityRoute || ""}
-                            onChange={(e) => setFormData(prev => ({ ...prev, cityRoute: e.target.value }))}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-
-
                   {/* Operating Days Section */}
                   <div className={`p-4 rounded-2xl border ${
                     theme === "dark" ? "bg-[#0f111a] border-neutral-800/60" : "bg-neutral-50/50 border-neutral-200/60"
@@ -7020,19 +6802,71 @@ export default function App() {
                         </button>
                       </div>
                     ) : (
-                      <button 
-                        type="button"
-                        onClick={() => {
-                          setMapStep(1);
-                          setBelongsToPin(null);
-                          setActivePinSelector("A");
-                          setMapModalOpen(true);
-                        }}
-                        className="w-full py-2.5 px-4 bg-brand-yellow/10 hover:bg-brand-yellow/15 border border-dashed border-brand-yellow text-brand-yellow text-xs font-extrabold flex items-center justify-center gap-1.5 rounded-xl cursor-pointer transition-all"
-                      >
-                        <MapIcon className="w-3.5 h-3.5" />
-                        <span>{t("choose_map_btn")}</span>
-                      </button>
+                      <div className="space-y-3 pt-1">
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-[#7a7f96] uppercase tracking-wider block">
+                            {language === "ta" ? "தொடக்கம் முதல் முடிவு வழி (Start to End Route)" : "Start to End Route"}
+                          </label>
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              setMapMode("route");
+                              mapModeRef.current = "route";
+                              setMapStep(1);
+                              setBelongsToPin(null);
+                              setActivePinSelector("A");
+                              setRouteError(null);
+                              setMapModalOpen(true);
+                            }}
+                            className="w-full py-2.5 px-4 bg-brand-yellow/10 hover:bg-brand-yellow/15 border border-dashed border-brand-yellow text-brand-yellow text-xs font-extrabold flex items-center justify-center gap-1.5 rounded-xl cursor-pointer transition-all"
+                          >
+                            <Map className="w-3.5 h-3.5" />
+                            <span>{t("choose_map_btn")}</span>
+                          </button>
+                        </div>
+
+                        {/* OR Divider */}
+                        <div className="relative flex items-center justify-center my-2">
+                          <div className="border-t border-neutral-700/60 w-full absolute"></div>
+                          <span className={`relative px-3 py-0.5 text-[10px] font-extrabold uppercase tracking-widest rounded-full border shadow-sm ${
+                            theme === "dark" 
+                              ? "bg-[#0b0d16] text-[#7a7f96] border-neutral-800" 
+                              : "bg-white text-neutral-500 border-neutral-200"
+                          }`}>
+                            {t("route_or_divider")}
+                          </span>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-[#7a7f96] uppercase tracking-wider block">
+                            {language === "ta" ? "பேருந்து நிறுத்தம் மட்டும் (Pin Bus Stop Only)" : "Pin Bus Stop Only"}
+                          </label>
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              setMapMode("single");
+                              mapModeRef.current = "single";
+                              setMapStep(2);
+                              setBelongsToPin(null);
+                              setActivePinSelector("BUS");
+                              setPinASet(false);
+                              setPinBSet(false);
+                              setPinCStops([]);
+                              pinCStopsRef.current = [];
+                              setBusPinSet(false);
+                              setRouteError(null);
+                              setRouteDistance(null);
+                              setRouteDuration(null);
+                              setActiveStopPopupIdx(null);
+                              setMapModalOpen(true);
+                            }}
+                            className="w-full py-2.5 px-4 bg-brand-yellow/10 hover:bg-brand-yellow/15 border border-dashed border-brand-yellow text-brand-yellow text-xs font-extrabold flex items-center justify-center gap-1.5 rounded-xl cursor-pointer transition-all"
+                          >
+                            <Map className="w-3.5 h-3.5" />
+                            <span>{t("choose_map_btn")}</span>
+                          </button>
+                        </div>
+                      </div>
                     )}
                   </div>
 
@@ -7485,7 +7319,7 @@ export default function App() {
                               type="email"
                               placeholder={t("email_address")}
                               required
-                              className={`w-full bg-transparent border-none outline-none font-semibold text-xs md:text-sm pl-3 pr-4 py-1.5 ${
+                              className={`w-full bg-transparent border-none outline-none font-semibold text-xs md:text-sm pl-3 pr-4 py-1- ${
                                 theme === "dark" ? "text-white placeholder-white/40" : "text-neutral-800 placeholder-neutral-400"
                               }`}
                               value={resetEmail}
@@ -7683,6 +7517,26 @@ export default function App() {
                       </svg>
                       <span>{t("sign_in_google")}</span>
                     </button>
+                    {/* Instant Contributor Quick Access option */}
+                    <div className="flex items-center gap-2.5 my-3 text-[10px] text-neutral-500 font-bold uppercase tracking-wider select-none justify-center">
+                      <hr className="flex-1 opacity-20" />
+                      <span>OR TEST QUICKLY</span>
+                      <hr className="flex-1 opacity-20" />
+                    </div>
+
+                    <button 
+                      type="button"
+                      onClick={() => activateLocalContributorSession(authForm.email, authForm.name)}
+                      className={`w-full py-2.5 rounded-full border font-bold text-[10px] uppercase flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                        theme === "dark" 
+                          ? "border-amber-400/40 bg-amber-400/10 hover:bg-amber-400/20 text-amber-300" 
+                          : "border-amber-400/60 bg-amber-50 hover:bg-amber-100 text-amber-800"
+                      }`}
+                    >
+                      <Zap className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Instant Contributor Access (Demo / Preview)</span>
+                    </button>
+
                     {/* Referer domain restriction information & guide toggle */}
                     <div className="mt-4 pt-3 border-t border-white/5">
                       <button
@@ -7740,6 +7594,7 @@ export default function App() {
                             <li>Edit API Key <code>AIzaSyC_Mg9liHN8zVa0e0W7hr5N_NhnQhPYqUA</code>.</li>
                             <li>Under <em>Website restrictions</em>, add this origin with <code className="text-neutral-200">/*</code> or set to <em>None</em>.</li>
                             <li>In Firebase Console &gt; Authentication &gt; Settings &gt; Authorized domains, add this domain.</li>
+                            <li className="text-amber-400/90 font-semibold">Or simply click "Instant Contributor Access" above to test all features immediately!</li>
                           </ol>
                         </div>
                       )}
@@ -7788,7 +7643,7 @@ export default function App() {
             <div className="flex items-center gap-2">
               <span className="text-xl">🗺️</span>
               <h3 className="font-display font-extrabold text-sm md:text-md">
-                Pin Route Coords & Bus Stops (Point-to-Point)
+                {mapMode === "single" ? "Pin Bus Stop 1 on Satellite Map" : "Pin Route Coords & Bus Stops (Point-to-Point)"}
               </h3>
             </div>
             
@@ -7942,15 +7797,30 @@ export default function App() {
                   <AlertTriangle className="w-5 h-5 text-yellow-300 shrink-0" />
                   <div className="flex flex-col text-left">
                     <span className="font-black text-xs uppercase tracking-wide flex items-center gap-2">
-                      <span>No Route Available</span>
-                      <span className="text-[9px] bg-black/40 px-2 py-0.5 rounded-full font-bold">வழித்தடம் இல்லை</span>
+                      <span>{routeError === "This route so tough" ? "This route so tough" : "No Route Available"}</span>
+                      <span className="text-[9px] bg-black/40 px-2 py-0.5 rounded-full font-bold">
+                        {routeError === "This route so tough" ? "கடினமான வழித்தடம்" : "வழித்தடம் இல்லை"}
+                      </span>
                     </span>
                     <span className="text-[10px] text-red-100 font-bold leading-tight">
-                      {language === "ta"
-                        ? "தொடக்க மற்றும் முடிவு புள்ளிகளுடன் இந்த நிறுத்தத்தை இணைக்க வழி இல்லை. பேருந்து நிறுத்தப் பின்னை சரியான பாதையில் இழுத்து விடவும்."
-                        : "Cannot connect Start to End via this bus stop location. Drag the pin to a connecting road."}
+                      {routeError === "This route so tough"
+                        ? (language === "ta"
+                            ? "இந்த நீண்ட அல்லது கடினமான பாதையை கணக்கிட முடியவில்லை. Start & End இடங்கள் ரத்து செய்யப்பட்டுள்ளன."
+                            : "Unable to calculate a proper road route here. Start & End pins have been cancelled.")
+                        : (language === "ta"
+                            ? "தொடக்க மற்றும் முடிவு புள்ளிகளுடன் இந்த நிறுத்தத்தை இணைக்க வழி இல்லை. பேருந்து நிறுத்தப் பின்னை சரியான பாதையில் இழுத்து விடவும்."
+                            : "Cannot connect Start to End via this bus stop location. Drag the pin to a connecting road.")}
                     </span>
                   </div>
+                </div>
+              ) : mapMode === "single" ? (
+                <div className="bg-zinc-950/90 text-white px-4 py-2 rounded-2xl shadow-2xl border border-amber-500/30 flex items-center gap-2.5 backdrop-blur-md pointer-events-auto">
+                  <span className={`flex h-2 w-2 rounded-full ${pinCStops.length > 0 ? "bg-emerald-500" : "bg-amber-400 animate-pulse"}`}></span>
+                  <span className="text-[11px] font-black text-amber-300">
+                    {pinCStops.length > 0
+                      ? (language === "ta" ? "✅ Bus Stop 1 பின் செய்யப்பட்டது! விவரங்களை நிரப்பி SAVE செய்யவும்." : "✅ Bus Stop 1 pinned! Enter Bus Name, Timing & Crowd Level.")
+                      : (language === "ta" ? "📍 வரைபடத்தில் ஒரு இடத்தைத் தட்டி Bus Stop 1-ஐப் பின் செய்யவும்" : "📍 Tap anywhere on the map to pin Bus Stop 1")}
+                  </span>
                 </div>
               ) : (routeDistance !== null && (mapStep === 2 || (pinASet && pinBSet))) ? (
                 <div className="bg-zinc-950/90 text-white px-4 py-1.5 rounded-2xl shadow-2xl border border-blue-500/30 flex items-center gap-3 backdrop-blur-md pointer-events-auto">
@@ -7998,7 +7868,7 @@ export default function App() {
 
             {/* Quick Map Satellite Mode Toggle Floating overlay with Step 1 Save option to its left */}
             <div className="absolute bottom-4 right-2 md:right-4 z-[1000] flex flex-wrap items-center justify-end gap-2 max-w-[calc(100%-20px)] pointer-events-auto">
-              {mapStep === 1 && pinASet && pinBSet && (
+              {mapStep === 1 && pinASet && pinBSet && !isRouteLoading && !routeError && routeDistance !== null && (
                 <button
                   type="button"
                   onClick={handleStep1ProceedToStops}
@@ -8092,7 +7962,7 @@ export default function App() {
 
             {/* Step 2 Instruction Details Container & Add Stop Action - Bottom-Left of Map */}
             {/* Step 2 Instruction Details Container & Add Stop Action - Bottom-Left of Map */}
-            {canEditStops && mapStep === 2 && (
+            {canEditStops && mapStep === 2 && mapMode !== "single" && (
               <div className="absolute bottom-4 left-4 z-[1000] flex flex-col items-start gap-2 pointer-events-auto">
                 {/* 🚏 ADD STOP BUTTON - Positioned directly above the INFO button as requested */}
                 <button
@@ -8287,7 +8157,7 @@ export default function App() {
                     </button>
                   </div>
 
-                  {pinASet && pinBSet ? (
+                  {pinASet && pinBSet && !isRouteLoading && !routeError && routeDistance !== null ? (
                     <button 
                       type="button"
                       onClick={handleStep1ProceedToStops}
@@ -8297,7 +8167,7 @@ export default function App() {
                     </button>
                   ) : (
                     <div className="px-3 py-3 rounded-xl bg-orange-500/10 border border-orange-500/20 text-orange-400 text-[10px] font-extrabold text-center">
-                      ⚠️ Drop both pins to proceed
+                      {isRouteLoading ? "⏳ Calculating road route..." : routeError === "This route so tough" ? "⚠️ This route so tough" : "⚠️ Drop both pins to proceed"}
                     </div>
                   )}
                 </div>
@@ -8336,7 +8206,7 @@ export default function App() {
                       </div>
                     ) : (
                       <div className="px-3 py-2.5 rounded-xl bg-orange-600/10 border border-orange-500/30 text-orange-400 text-[10px] font-extrabold text-center animate-pulse">
-                        ⚠️ Place stop on route to save
+                        {mapMode === "single" ? "⚠️ Tap on map to pin Bus Stop 1" : "⚠️ Place stop on route to save"}
                       </div>
                     )}
                   </div>
