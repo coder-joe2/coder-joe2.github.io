@@ -5245,9 +5245,12 @@ export default function App() {
           : "bg-white/90 border-[#ced0d4]/80"
       }`}>
         <div className="flex items-center gap-3" onClick={() => navigateToTab("view")}>
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-yellow to-orange-500 flex items-center justify-center text-black font-extrabold text-xl shadow-md">
-            🚌
-          </div>
+          <img
+            src="./user-stop-logo.png"
+            alt="User Stop"
+            className="w-10 h-10 rounded-xl shadow-md object-contain"
+            loading="eager"
+          />
           <div>
             <h1 className="font-display font-extrabold text-xs tracking-wider leading-none text-brand-yellow">USER STOP</h1>
           </div>
@@ -5336,9 +5339,12 @@ export default function App() {
             theme === "dark" ? "bg-[#0f1117]" : "bg-white"
           }`}>
             <div className="flex items-center gap-3 mb-8">
-              <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-brand-yellow to-orange-500 flex items-center justify-center text-black font-extrabold text-2xl shadow-lg">
-                🚌
-              </div>
+              <img
+                src="./user-stop-logo.png"
+                alt="User Stop"
+                className="w-11 h-11 rounded-xl shadow-lg object-contain"
+                loading="eager"
+              />
               <div>
                 <h1 className="font-display font-extrabold text-sm tracking-wide">TN BUS STOP</h1>
                 <p className="text-[10px] text-brand-yellow font-extrabold uppercase mt-0.5">COMMUNITY REGISTRY</p>
@@ -5473,9 +5479,13 @@ export default function App() {
       }`}>
         {/* LOGO */}
         <div className={`flex items-center gap-4 mb-10 ${isSidebarCollapsed ? "justify-center" : ""}`}>
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-brand-yellow to-orange-500 flex items-center justify-center text-black font-extrabold text-2xl shadow-md cursor-pointer hover:rotate-6 transition-transform" onClick={toggleSidebar}>
-            🚌
-          </div>
+          <img
+            src="./user-stop-logo.png"
+            alt="User Stop"
+            className="w-12 h-12 rounded-xl shadow-md cursor-pointer hover:rotate-6 transition-transform object-contain"
+            onClick={toggleSidebar}
+            loading="eager"
+          />
           {!isSidebarCollapsed && (
             <div>
               <h1 className="font-display font-extrabold text-md tracking-wider leading-none text-brand-yellow">USER STOP</h1>
